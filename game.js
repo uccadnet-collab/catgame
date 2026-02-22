@@ -276,28 +276,33 @@ const BGM_BASS = [
 
 let bgmScheduled = false;
 let bgmLoop = null;
+let bgmMasterGain = null; // 전역 마스터 게인 (fade out 제어용)
+let bgmGeneration = 0;    // 세대 번호: stopBGM 시 증가 → 이전 루프 자동 무효화
 
 function startBGM() {
   if (!musicOn) return;
   try {
     const ac = getAudioCtx();
-    stopBGM();
+    stopBGM();                  // 이전 루프·타이머 완전 정리
     bgmScheduled = true;
-    scheduleBGM(ac);
+    bgmGeneration++;            // 새 세대 시작
+    scheduleBGM(ac, bgmGeneration);
   } catch(e) {}
 }
 
-function scheduleBGM(ac) {
-  if (!musicOn || !bgmScheduled) return;
+function scheduleBGM(ac, gen) {
+  // 세대가 다르면(=stopBGM 후 남은 콜백) 즉시 종료
+  if (!musicOn || !bgmScheduled || gen !== bgmGeneration) return;
 
   const base = ac.currentTime + 0.05;
 
-  // 마스터 게인
+  // 마스터 게인 (전역 참조 유지 → stopBGM에서 fade out 가능)
   const masterGain = ac.createGain();
   masterGain.gain.value = 0.12;
   masterGain.connect(ac.destination);
+  bgmMasterGain = masterGain;
 
-  // 멜로디 – triangle 파형 (밝고 깨끗한 소리)
+  // 멜로디 – triangle 파형
   BGM_MELODY.forEach(([startSec, freq, dur]) => {
     const t = base + startSec;
     const d = Math.max(dur * 0.85, 0.05);
@@ -313,7 +318,7 @@ function scheduleBGM(ac) {
     o.start(t); o.stop(t + d + 0.01);
   });
 
-  // 베이스 – sine 파형 (부드러운 저음)
+  // 베이스 – sine 파형
   BGM_BASS.forEach(([startSec, freq, dur]) => {
     const t = base + startSec;
     const d = Math.max(dur * 0.8, 0.04);
@@ -327,18 +332,28 @@ function scheduleBGM(ac) {
     o.start(t); o.stop(t + d + 0.01);
   });
 
-  // 루프: 마지막 음표가 끝나면 다시 재생
+  // 루프: 이 세대가 유효한 경우에만 재스케줄
   bgmLoop = setTimeout(() => {
-    if (musicOn && bgmScheduled) scheduleBGM(ac);
+    scheduleBGM(ac, gen);
   }, BGM_LOOP_DUR * 1000 - 150);
 }
 
 function stopBGM() {
   bgmScheduled = false;
+  bgmGeneration++;            // 기존 세대 무효화 → setTimeout 콜백 자동 차단
   if (bgmLoop) { clearTimeout(bgmLoop); bgmLoop = null; }
+  // 현재 재생 중인 masterGain을 빠르게 fade out (0.2초)
+  if (bgmMasterGain) {
+    try {
+      const ac = bgmMasterGain.context;
+      bgmMasterGain.gain.setValueAtTime(bgmMasterGain.gain.value, ac.currentTime);
+      bgmMasterGain.gain.linearRampToValueAtTime(0, ac.currentTime + 0.2);
+    } catch(e) {}
+    bgmMasterGain = null;
+  }
 }
 
-// 음악 토글 버튼 - DOMContentLoaded 후 등록해서 중복 방지
+// 음악 토글 버튼
 function initMusicBtn() {
   const btn = document.getElementById('music-btn');
   if (!btn) return;
@@ -540,19 +555,56 @@ function getLevelPlatforms(lvl) {
   return sets;
 }
 
+// 보스방 발판 목록 (platforms와 coins가 공유)
+function getBossPlats(lvl) {
+  if (!isBossLevel(lvl)) return [];
+  const tier = lvl / 5;
+  const platCount = 4 + tier;
+  const roomW = CW * 1.5;
+  const colors = ['#c0392b','#8e44ad','#2980b9','#27ae60'];
+  const color = colors[tier-1] || '#888';
+  const plats = [];
+  for (let i=0; i<platCount; i++) {
+    const px = 160 + Math.round(i * (roomW-280) / platCount);
+    const pyOptions = [GROUND_Y-90, GROUND_Y-145, GROUND_Y-195];
+    const py = pyOptions[i % pyOptions.length];
+    plats.push({x:px, y:py, w:110, h:18, color});
+  }
+  return plats;
+}
+
 function makePlatforms(lvl) {
+  if (isBossLevel(lvl)) {
+    // 보스방: 바닥 + 발판
+    return [...makeFloor(lvl), ...getBossPlats(lvl)];
+  }
   return [...makeFloor(lvl), ...getLevelPlatforms(lvl)];
 }
 
 function makeCoins(lvl) {
-  if (isBossLevel(lvl)) return [];
   const coins=[];
-  for (const p of getLevelPlatforms(lvl)) {
-    const cnt=2+Math.floor(Math.random()*2);
-    for (let i=0; i<cnt; i++) coins.push({x:p.x+20+i*24,y:p.y-20,r:9,collected:false});
+
+  if (!isBossLevel(lvl)) {
+    // 일반 레벨: 플랫폼 위 + 지상
+    for (const p of getLevelPlatforms(lvl)) {
+      const cnt=2+Math.floor(Math.random()*2);
+      for (let i=0; i<cnt; i++) coins.push({x:p.x+20+i*24,y:p.y-20,r:9,collected:false});
+    }
+    const ww=getWorldW(lvl);
+    for (let x=300; x<ww-200; x+=180) coins.push({x,y:GROUND_Y-20,r:9,collected:false});
+  } else {
+    // 보스 레벨: 발판 위에 코인 3개씩 + 지상 코인
+    const bossPlats = getBossPlats(lvl);
+    for (const p of bossPlats) {
+      for (let c=0; c<3; c++) {
+        coins.push({x: p.x+15+c*32, y: p.y-18, r:9, collected:false});
+      }
+    }
+    const roomW = CW * 1.5;
+    for (let x=150; x<roomW-100; x+=210) {
+      coins.push({x, y:GROUND_Y-20, r:9, collected:false});
+    }
   }
-  const ww=getWorldW(lvl);
-  for (let x=300; x<ww-200; x+=180) coins.push({x,y:GROUND_Y-20,r:9,collected:false});
   return coins;
 }
 
