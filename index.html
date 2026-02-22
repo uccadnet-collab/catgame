@@ -74,40 +74,43 @@
     /* ── 랭킹 오버레이 ── */
     #rank-overlay {
       position:absolute; inset:0; display:none;
-      flex-direction:column; align-items:center; justify-content:center;
-      gap:8px; background:rgba(0,0,0,0.88); z-index:30; color:#fff;
-      overflow-y:auto; padding:12px 0;
+      flex-direction:column; align-items:center; justify-content:flex-start;
+      gap:5px; background:rgba(0,0,0,0.88); z-index:30; color:#fff;
+      overflow-y:auto; padding:10px 0 16px;
+      box-sizing:border-box;
     }
-    #rank-overlay h2 { font-size:clamp(18px,3.5vw,30px); color:#ffd700; text-shadow:0 0 12px #ffd700; }
+    #rank-overlay h2 { font-size:clamp(15px,3vw,24px); color:#ffd700; text-shadow:0 0 12px #ffd700; margin-top:4px; }
     #rank-overlay input {
-      padding:7px 14px; font-size:16px; border-radius:8px;
+      padding:5px 12px; font-size:14px; border-radius:8px;
       border:2px solid #e94560; background:#222; color:#fff;
-      text-align:center; width:180px;
+      text-align:center; width:160px;
     }
     #rank-overlay button {
-      padding:7px 22px; font-size:15px; background:#e94560;
+      padding:5px 18px; font-size:14px; background:#e94560;
       color:#fff; border:none; border-radius:8px; cursor:pointer;
     }
 
     /* 랭킹 두 컬럼 레이아웃 */
     #rank-cols {
-      display:flex; gap:24px; align-items:flex-start; justify-content:center;
+      display:flex; gap:16px; align-items:flex-start; justify-content:center;
       width:100%; max-width:560px; padding:0 12px;
+      flex:1; /* 남은 공간 채우기 */
     }
-    .rank-col { flex:1; }
-    .rank-col h3 { font-size:13px; color:#ffd700; text-align:center; margin-bottom:4px; }
+    .rank-col { flex:1; min-width:0; }
+    .rank-col h3 { font-size:12px; color:#ffd700; text-align:center; margin-bottom:3px; }
     .rank-list-inner {
       list-style:none; width:100%;
     }
     .rank-list-inner li {
       display:flex; justify-content:space-between;
-      padding:3px 6px; border-bottom:1px solid #333; font-size:12px;
+      padding:2px 6px; border-bottom:1px solid #333; font-size:11px;
+      line-height:1.5;
     }
     .rank-list-inner li:nth-child(1) { color:#ffd700; }
     .rank-list-inner li:nth-child(2) { color:#c0c0c0; }
     .rank-list-inner li:nth-child(3) { color:#cd7f32; }
 
-    #rank-status { font-size:12px; color:#aaa; min-height:15px; text-align:center; }
+    #rank-status { font-size:11px; color:#aaa; min-height:14px; text-align:center; }
 
     /* ── 모바일 컨트롤 ── */
     #mobile-controls {
@@ -175,7 +178,7 @@
     <!-- 랭킹 오버레이 -->
     <div id="rank-overlay">
       <h2>🏆 게임 종료!</h2>
-      <p id="rank-score-text" style="font-size:16px;"></p>
+      <p id="rank-score-text" style="font-size:14px;"></p>
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="text" id="name-input" maxlength="10" placeholder="이름 입력">
         <button id="rank-save-btn">저장</button>
@@ -194,7 +197,7 @@
         </div>
       </div>
 
-      <button id="rank-retry-btn" style="margin-top:8px;background:#555;">다시 하기</button>
+      <button id="rank-retry-btn" style="margin-top:4px;background:#555;flex-shrink:0;">다시 하기</button>
     </div>
 
     <!-- 모바일 컨트롤 -->
@@ -211,40 +214,39 @@
   </div>
 </div>
 
-<!-- 화면 꽉 채우기 (가로 우선, 세로 맞춤) -->
+<!-- 화면 완전 꽉 채우기: canvas 해상도를 화면 비율에 맞게 동적 설정 -->
 <script>
-  const GAME_W = 800, GAME_H = 450;
   const wrapper = document.getElementById('game-wrapper');
+  const cvs     = document.getElementById('canvas');
+
   function resizeGame() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    // 화면을 최대한 채우되 비율 유지 (여백 최소화)
-    const scaleX = vw / GAME_W;
-    const scaleY = vh / GAME_H;
-    // 가로 화면에서는 높이 기준으로 맞추고 가로는 꽉 채움
-    // 세로 여백이 생기지 않도록 높이 기준 우선
-    const scale = Math.max(scaleX, scaleY); // 화면을 꽉 채움 (crop 방식)
-    // 단, 너무 많이 잘리면 min 방식 사용
-    const safeScale = scaleY; // 높이에 맞추고 좌우는 늘어남
-    // 실제로는 가로는 vw 전체, 높이는 비율 맞춤
-    const w = vw;
-    const h = Math.round(vw / GAME_W * GAME_H);
-    if (h <= vh) {
-      // 가로 꽉 채우고 높이는 비율
-      wrapper.style.width  = vw + 'px';
-      wrapper.style.height = h + 'px';
-    } else {
-      // 높이 꽉 채우고 가로는 비율
-      const h2 = vh;
-      const w2 = Math.round(vh / GAME_H * GAME_W);
-      wrapper.style.width  = w2 + 'px';
-      wrapper.style.height = h2 + 'px';
-    }
+
+    // wrapper = 화면 전체
+    wrapper.style.width  = vw + 'px';
+    wrapper.style.height = vh + 'px';
+
+    // canvas DOM 크기도 화면 전체
+    cvs.style.width  = vw + 'px';
+    cvs.style.height = vh + 'px';
+
+    // canvas 내부 해상도 = 화면 실제 픽셀 (고해상도 대응)
+    // game.js가 사용하는 논리 해상도는 800×(800/비율)로 고정
+    // → 화면 비율에 맞춰 CH를 계산해 game.js에 전달
+    const logicalW = 800;
+    const logicalH = Math.round(logicalW * vh / vw);
+    cvs.width  = logicalW;
+    cvs.height = logicalH;
+
+    // game.js에 새 논리 해상도 알림
+    if (window._onGameResize) window._onGameResize(logicalW, logicalH);
   }
+
   resizeGame();
   window.addEventListener('resize', resizeGame);
   screen.orientation && screen.orientation.addEventListener('change', () => {
-    setTimeout(resizeGame, 100);
+    setTimeout(resizeGame, 150);
   });
 </script>
 
