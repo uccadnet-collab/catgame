@@ -5,19 +5,33 @@
 const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d');
 
-// 내부 해상도
-const CW = 800, CH = 450;
-canvas.width = CW; canvas.height = CH;
+// ── 동적 해상도 (화면 비율에 따라 변함) ─────────
+// index.html resizeGame()이 canvas.width/height를 먼저 설정하므로
+// 여기서는 현재 값을 읽어서 사용
+let CW = canvas.width  || 800;
+let CH = canvas.height || 450;
+
+// 해상도 변경 시 재계산이 필요한 값들
+function getGroundY() { return CH - Math.round(CH * 0.133); } // 화면 아래 13%
 
 // ── 상수 ──────────────────────────────────────
 const GRAVITY      = 0.55;
 const PLAYER_SPEED = 4.5;
 const JUMP_FORCE   = -13;
-const GROUND_Y     = CH - 60;
+let   GROUND_Y     = getGroundY();
 const TILE         = 40;
 const MAX_LEVEL    = 20;
-const SUPER_DURATION   = 600;  // 10초
+const SUPER_DURATION   = 600;
 const SUPER_COIN_COUNT = 10;
+
+// index.html에서 화면 크기 바뀔 때 호출
+window._onGameResize = (newW, newH) => {
+  CW = newW; CH = newH;
+  canvas.width = CW; canvas.height = CH;
+  GROUND_Y = getGroundY();
+  // 플레이어 위치도 바닥 기준으로 재조정
+  if (player) player.y = GROUND_Y - player.h;
+};
 
 // ── 이미지 로드 ───────────────────────────────
 const catImg = new Image();
@@ -365,7 +379,8 @@ bindMobileBtn('btn-shoot', 'shoot');
 
 // ── 점프 & 발사 ───────────────────────────────
 // 총알 최대 사거리: 화면 너비의 1/3
-const BULLET_MAX_DIST = CW / 3;
+// 총알 사거리: 항상 현재 CW의 1/3 (동적)
+function getBulletMaxDist() { return CW / 3; }
 
 function tryJump() {
   if (player.onGround) {
@@ -711,7 +726,7 @@ function update() {
     if (!bull.alive) continue;
     bull.x += bull.vx;
     const dist = Math.abs(bull.x - bull.startX);
-    if (dist > BULLET_MAX_DIST || bull.x < -20 || bull.x > ww + 20) bull.alive = false;
+    if (dist > getBulletMaxDist() || bull.x < -20 || bull.x > ww + 20) bull.alive = false;
   }
   bullets = bullets.filter(b => b.alive);
 
