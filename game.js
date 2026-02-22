@@ -862,8 +862,8 @@ function update(dt=1) {
     }
   }
 
-  // 골
-  if (player.x + player.w > goal.x && player.y + player.h > goal.y) {
+  // 골 – 깃발 x 범위에 플레이어가 닿으면 클리어
+  if (player.x + player.w > goal.x && player.x < goal.x + goal.w + 20) {
     const addScore = 300 + level * 50;
     playLevelClear();
     if (level < MAX_LEVEL) {
@@ -1671,34 +1671,40 @@ function showOverlay(title,desc,btnText) {
 function showContinueOverlay() {
   overlay.innerHTML=`
     <h1 style="color:#ffd700;text-shadow:0 0 20px #ffd700;">💀 게임 오버!</h1>
-    <p style="font-size:clamp(13px,2vw,18px);">레벨 <b style="color:#e94560">${level}</b> / 점수 <b style="color:#ffd700">${score.toLocaleString()}</b></p>
-    <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
-      <button id="continueBtn" style="padding:9px 24px;font-size:clamp(13px,2vw,17px);background:#e94560;color:#fff;border:none;border-radius:8px;cursor:pointer;">
-        ▶ 이어하기 (생명 10개)
+    <p style="font-size:clamp(13px,2vw,18px);">
+      레벨 <b style="color:#e94560">${level}</b> &nbsp;|&nbsp; 점수 <b style="color:#ffd700">${score.toLocaleString()}</b>
+    </p>
+    <p style="font-size:clamp(11px,1.6vw,14px);color:#aaa;margin-top:2px;">
+      이어하기: 현재 레벨(${level})부터 생명 10개로 재시작
+    </p>
+    <div style="display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;justify-content:center;">
+      <button id="continueBtn" style="padding:10px 26px;font-size:clamp(13px,2vw,17px);background:#e94560;color:#fff;border:none;border-radius:8px;cursor:pointer;">
+        ▶ 이어하기 (레벨 ${level})
       </button>
-      <button id="restartBtn" style="padding:9px 24px;font-size:clamp(13px,2vw,17px);background:#555;color:#fff;border:none;border-radius:8px;cursor:pointer;">
-        🔄 처음부터
+      <button id="restartBtn" style="padding:10px 26px;font-size:clamp(13px,2vw,17px);background:#555;color:#fff;border:none;border-radius:8px;cursor:pointer;">
+        🔄 레벨 1부터
       </button>
     </div>
-    <button id="rankBtn" style="padding:6px 18px;font-size:13px;background:transparent;color:#aaa;border:1px solid #555;border-radius:8px;cursor:pointer;margin-top:4px;">
+    <button id="rankBtn" style="padding:6px 18px;font-size:12px;background:transparent;color:#aaa;border:1px solid #555;border-radius:8px;cursor:pointer;margin-top:8px;">
       🏆 점수 저장 & 랭킹 보기
     </button>
   `;
   overlay.style.display='flex';
 
-  // 이어하기: 레벨 유지, 점수 유지, 생명만 10개로 충전
+  // 이어하기: 현재 레벨 유지, 점수 유지, 생명만 10개로 충전
   document.getElementById('continueBtn').addEventListener('click', () => {
     lives = 10;
     coinCounter = 0; superTimer = 0;
-    initLevel();
+    initLevel();          // 현재 level 그대로 재초기화
     bannerTimer = BANNER_DURATION;
     updateUI();
     overlay.style.display='none';
+    lastTimestamp = null; // dt 리셋 (속도 튐 방지)
     state='play';
     startBGM();
   });
 
-  // 처음부터
+  // 레벨1부터 완전 리셋
   document.getElementById('restartBtn').addEventListener('click', startGame);
 
   // 점수 저장 & 랭킹
@@ -1711,11 +1717,13 @@ function showContinueOverlay() {
 function startGame() {
   score=0; lives=10; level=1;
   coinCounter=0; superTimer=0;
+  clearAnim=null;
   initLevel();
   bannerTimer=BANNER_DURATION;
   updateUI();
   overlay.style.display='none';
   document.getElementById('rank-overlay').style.display='none';
+  lastTimestamp = null; // dt 리셋 (속도 튐 방지)
   state='play';
   startBGM();
 }
@@ -1723,22 +1731,25 @@ function startGame() {
 document.getElementById('startBtn').addEventListener('click',startGame);
 
 // ── 게임 루프 (Delta Time 기반 – 60Hz/90Hz/120Hz 모두 동일 속도) ──
-let lastTimestamp = 0;
+let lastTimestamp = null; // null = 아직 첫 프레임 전
 let _lastDt = 1; // bannerTimer 등 draw에서 참조
 
 function loop(timestamp) {
-  // delta: 60fps 기준 1.0, 120fps면 0.5 → 속도 균일
-  const raw = timestamp - lastTimestamp;
+  // 첫 프레임은 dt=1로 시작 (이상한 큰 값 방지)
+  let dt = 1;
+  if (lastTimestamp !== null) {
+    const raw = timestamp - lastTimestamp;
+    // 16ms~50ms 사이만 정상 dt, 벗어나면 1.0으로 고정
+    dt = (raw >= 8 && raw <= 100) ? raw / (1000 / 60) : 1;
+    dt = Math.min(dt, 2.5); // 최대 2.5배로 제한
+  }
   lastTimestamp = timestamp;
-  // 첫 프레임이거나 탭 전환 후 복귀 시 튀는 것 방지 (최대 3프레임치로 제한)
-  const dt = (raw > 0 && raw < 500) ? Math.min(raw / (1000 / 60), 3) : 1;
   _lastDt = dt;
 
   update(dt);
   draw();
   if (state==='win')  { state='menu'; }
   if (state==='dead') { state='menu'; }
-  // levelclear는 updateLevelClear 내부에서 자동으로 play로 전환
   requestAnimationFrame(loop);
 }
 
