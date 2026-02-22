@@ -263,12 +263,18 @@ function stopBGM() {
   if (bgmLoop) { clearTimeout(bgmLoop); bgmLoop = null; }
 }
 
-// 음악 토글 버튼
-document.getElementById('music-btn').addEventListener('click', () => {
-  musicOn = !musicOn;
-  document.getElementById('music-btn').textContent = musicOn ? '🔊' : '🔇';
-  if (musicOn) startBGM(); else stopBGM();
-});
+// 음악 토글 버튼 - DOMContentLoaded 후 등록해서 중복 방지
+function initMusicBtn() {
+  const btn = document.getElementById('music-btn');
+  if (!btn) return;
+  btn.onclick = () => {
+    musicOn = !musicOn;
+    btn.textContent = musicOn ? '🔊' : '🔇';
+    if (musicOn) startBGM(); else stopBGM();
+  };
+}
+// game.js는 body 끝에서 로드되므로 DOM이 이미 준비된 상태
+initMusicBtn();
 
 
 // ── 상태 ──────────────────────────────────────
@@ -288,13 +294,15 @@ let bossDefeated = false;
 let shootCooldown = 0;
 let lastScore  = 0;
 
+// ── 보스 레벨 판별 ────────────────────────────
+// 5, 10, 15, 20 레벨이 보스
+function isBossLevel(lvl) { return lvl % 5 === 0; }
+
 // ── 배경/시간대 (레벨별) ─────────────────────
-// 레벨 1~5: 아침, 6~10: 낮, 11~15: 저녁, 16~19: 밤, 20: 보스
+// 5판 단위로 아침/밤 교차 (1~5 아침, 6~10 밤, 11~15 아침, 16~20 밤)
 const TIME_OF_DAY = (lvl) => {
-  if (lvl <= 5)  return 'morning';
-  if (lvl <= 10) return 'day';
-  if (lvl <= 15) return 'evening';
-  return 'night';
+  const cycle = Math.floor((lvl - 1) / 5); // 0,1,2,3
+  return cycle % 2 === 0 ? 'morning' : 'night';
 };
 
 const SKY_GRADIENT = {
@@ -395,10 +403,10 @@ const player = {
 // ════════════════════════════════════════════
 //  레벨 생성
 // ════════════════════════════════════════════
-function getWorldW(lvl) { return lvl === MAX_LEVEL ? CW : 1600 + (lvl-1)*200; }
+function getWorldW(lvl) { return isBossLevel(lvl) ? CW * 1.5 : 1600 + (lvl-1)*200; }
 
 function getLevelGaps(lvl) {
-  if (lvl === MAX_LEVEL) return []; // 보스방 구멍 없음
+  if (isBossLevel(lvl)) return []; // 보스방 구멍 없음
   const gaps = {
     1:[], 2:[[500,540]], 3:[[400,450],[700,760]],
     4:[[300,360],[600,650],[900,960]],
@@ -440,7 +448,7 @@ function getLevelColor(lvl) {
 }
 
 function getLevelPlatforms(lvl) {
-  if (lvl === MAX_LEVEL) return []; // 보스방은 플랫폼 없음
+  if (isBossLevel(lvl)) return []; // 보스방은 플랫폼 없음
   const sets=[];
   const ww=getWorldW(lvl);
   const count=6+Math.floor(lvl*1.2);
@@ -461,7 +469,7 @@ function makePlatforms(lvl) {
 }
 
 function makeCoins(lvl) {
-  if (lvl === MAX_LEVEL) return [];
+  if (isBossLevel(lvl)) return [];
   const coins=[];
   for (const p of getLevelPlatforms(lvl)) {
     const cnt=2+Math.floor(Math.random()*2);
@@ -473,48 +481,60 @@ function makeCoins(lvl) {
 }
 
 function makeEnemies(lvl) {
-  if (lvl === MAX_LEVEL) return [];
-  const speed=1.0+lvl*0.15;
-  const enemies=[];
-  const ww=getWorldW(lvl);
-  const count=3+Math.floor(lvl*0.8);
-  for (let i=0; i<count; i++) {
-    const x=350+Math.round(i*(ww-500)/count);
+  if (isBossLevel(lvl)) return []; // 보스 레벨엔 일반 적 없음
+  const speed = 1.0 + lvl * 0.15;
+  const enemies = [];
+  const ww = getWorldW(lvl);
+
+  // 지상 몬스터 (수량 대폭 증가)
+  const groundCount = 5 + Math.floor(lvl * 1.2);
+  for (let i = 0; i < groundCount; i++) {
+    const x = 300 + Math.round(i * (ww - 400) / groundCount);
     enemies.push({
-      x,y:GROUND_Y-28,w:32,h:28,
-      vx:(i%2===0?1:-1)*speed,
-      patrolMin:x-120,patrolMax:x+120,
-      alive:true, type:'ground'
+      x, y: GROUND_Y - 28, w: 32, h: 28,
+      vx: (i % 2 === 0 ? 1 : -1) * speed,
+      patrolMin: x - 150, patrolMax: x + 150,
+      alive: true, type: 'ground'
     });
   }
-  // 날아다니는 몬스터 (레벨 3부터)
-  if (lvl >= 3) {
-    const flyCount = 1 + Math.floor(lvl/3);
-    for (let i=0; i<flyCount; i++) {
-      const x=400+Math.round(i*(ww-600)/flyCount);
-      const baseY=GROUND_Y-160-Math.random()*80;
+
+  // 날아다니는 몬스터 (레벨 2부터, 수량 대폭 증가)
+  if (lvl >= 2) {
+    const flyCount = 3 + Math.floor(lvl * 0.8); // 대폭 증가
+    for (let i = 0; i < flyCount; i++) {
+      const x = 250 + Math.round(i * (ww - 400) / flyCount);
+      // 높이 다양하게 - 낮게도, 높게도
+      const heightOptions = [
+        GROUND_Y - 100,
+        GROUND_Y - 150,
+        GROUND_Y - 200,
+        GROUND_Y - 250,
+        GROUND_Y - 300,
+      ];
+      const baseY = heightOptions[i % heightOptions.length];
       enemies.push({
-        x,y:baseY,w:30,h:24,
-        vx:(i%2===0?1:-1)*(speed*0.7),
-        vy:0,
-        patrolMin:x-180,patrolMax:x+180,
-        baseY,flyPhase:Math.random()*Math.PI*2,
-        alive:true, type:'fly'
+        x, y: baseY, w: 30, h: 24,
+        vx: (i % 2 === 0 ? 1 : -1) * (speed * 0.8),
+        vy: 0,
+        patrolMin: x - 200, patrolMax: x + 200,
+        baseY, flyPhase: (i * 1.3) % (Math.PI * 2),
+        alive: true, type: 'fly'
       });
     }
   }
-  // 플랫폼 위 적 (레벨 5부터)
-  if (lvl >= 5) {
-    const platList=getLevelPlatforms(lvl);
-    const pickEvery=Math.max(1,Math.floor(platList.length/3));
-    for (let i=0; i<platList.length; i+=pickEvery) {
-      const p=platList[i];
-      if (p.w<70) continue;
+
+  // 플랫폼 위 적 (레벨 4부터, 더 자주 배치)
+  if (lvl >= 4) {
+    const platList = getLevelPlatforms(lvl);
+    const pickEvery = Math.max(1, Math.floor(platList.length / 5));
+    for (let i = 0; i < platList.length; i += pickEvery) {
+      const p = platList[i];
+      if (p.w < 60) continue;
       enemies.push({
-        x:p.x+10,y:p.y-28,w:28,h:28,
-        vx:speed*0.7,
-        patrolMin:p.x,patrolMax:p.x+p.w-28,
-        alive:true, type:'ground'
+        x: p.x + 10, y: p.y - 28, w: 28, h: 28,
+        vx: speed * 0.8,
+        patrolMin: p.x, patrolMax: p.x + p.w - 28,
+        alive: true, type: 'ground'
       });
     }
   }
@@ -525,34 +545,43 @@ function makeEnemies(lvl) {
 let goal={};
 
 function initLevel() {
-  const ww=getWorldW(level);
-  goal={x:ww-80,y:GROUND_Y-110,w:20,h:110};
-  platforms=makePlatforms(level);
-  coins=makeCoins(level);
-  enemies=makeEnemies(level);
-  bullets=[];
-  bossBullets=[];
-  bossState = level === MAX_LEVEL ? initBoss() : null;
+  const ww = getWorldW(level);
+  goal = { x: ww - 80, y: GROUND_Y - 110, w: 20, h: 110 };
+  platforms   = makePlatforms(level);
+  coins       = makeCoins(level);
+  enemies     = makeEnemies(level);
+  bullets     = [];
+  bossBullets = [];
+  // 5의 배수 레벨 = 보스 레벨
+  bossState    = isBossLevel(level) ? initBoss(level) : null;
   bossDefeated = false;
   player.reset();
-  cameraX=0; invincible=0; superTimer=0;
-  frameCount=0; shootCooldown=0;
+  cameraX = 0; invincible = 0; superTimer = 0;
+  frameCount = 0; shootCooldown = 0;
 }
 
 let platforms=[], coins=[], enemies=[];
 
 // ════════════════════════════════════════════
-//  보스 (레벨 20)
+//  보스 (5, 10, 15, 20 레벨)
 // ════════════════════════════════════════════
-function initBoss() {
+function initBoss(lvl) {
+  // 레벨에 따라 보스 강도 증가
+  const tier = lvl / 5; // 1=미니, 2=중간, 3=강함, 4=최종
+  const scale = 0.6 + tier * 0.1; // 크기도 조금씩 커짐
+  const w = Math.round(70 * scale);
+  const h = Math.round(100 * scale);
+  const hp = 10 + tier * 10; // 20, 30, 40, 50
+  const speed = 1.0 + tier * 0.4;
+  const shootInterval = Math.max(80, 150 - tier * 15); // 더 빠르게
+  const pawInterval   = Math.max(100, 180 - tier * 20);
   return {
-    x: CW*0.55, y: GROUND_Y-120,
-    w: 90, h: 120,
-    hp: 30, maxHp: 30,
-    vx: -1.5, vy: 0,
-    phase: 'idle',   // idle, attack, jump
-    phaseTimer: 0,
-    shootTimer: 0,
+    x: CW * 0.55, y: GROUND_Y - h,
+    w, h, hp, maxHp: hp,
+    vx: -speed, vy: 0,
+    tier,
+    shootTimer: 0, shootInterval,
+    phaseTimer: 0, pawInterval,
     eyeGlow: 0,
     pawAttack: false, pawTimer: 0, pawSide: 1,
     alive: true,
@@ -572,8 +601,8 @@ function updateBoss() {
   if (b.x < CW*0.3 || b.x + b.w > CW*0.95) b.vx *= -1;
   b.facing = b.vx > 0 ? 1 : -1;
 
-  // 발 공격 (3초마다)
-  if (b.phaseTimer % 180 === 0) {
+  // 발 공격 (tier에 따라 주기 변화)
+  if (b.phaseTimer % b.pawInterval === 0) {
     b.pawAttack = true; b.pawTimer = 40;
     b.pawSide = b.vx > 0 ? 1 : -1;
   }
@@ -585,23 +614,24 @@ function updateBoss() {
   // 앞발 공격 히트 판정
   if (b.pawAttack && b.pawTimer > 10 && b.pawTimer < 35) {
     const pawX = b.pawSide === 1 ? b.x + b.w : b.x - 40;
-    const pawY = b.y + b.h*0.6;
-    const pawHit = { x:pawX, y:pawY, w:40, h:30 };
-    if (invincible===0 && rectOverlap(player, pawHit)) { loseLife(); return; }
+    const pawY = b.y + b.h * 0.6;
+    const pawHit = { x: pawX, y: pawY, w: 40, h: 30 };
+    if (invincible === 0 && rectOverlap(player, pawHit)) { loseLife(); return; }
   }
 
-  // 총알 발사 (2.5초마다)
-  if (b.shootTimer % 150 === 0) {
-    // 플레이어 방향으로 3발 부채꼴
-    const dx = (player.x - b.x);
-    const dy = (player.y - b.y);
-    const dist = Math.hypot(dx, dy) || 1;
-    for (let a = -1; a <= 1; a++) {
-      const angle = Math.atan2(dy,dx) + a*0.3;
+  // 총알 발사 (tier에 따라 발수 & 속도 증가)
+  if (b.shootTimer % b.shootInterval === 0) {
+    const dx = player.x - b.x;
+    const dy = player.y - b.y;
+    const bulletCount = 1 + b.tier; // 2~5발
+    const spreadAngle = 0.25;
+    for (let a = -(bulletCount-1)/2; a <= (bulletCount-1)/2; a++) {
+      const angle = Math.atan2(dy, dx) + a * spreadAngle;
+      const spd = 4 + b.tier * 0.8;
       bossBullets.push({
-        x: b.x+b.w/2, y: b.y+b.h*0.3,
-        vx: Math.cos(angle)*5, vy: Math.sin(angle)*5,
-        alive:true
+        x: b.x + b.w / 2, y: b.y + b.h * 0.3,
+        vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd,
+        alive: true
       });
     }
   }
@@ -685,10 +715,18 @@ function update() {
   }
   bullets = bullets.filter(b => b.alive);
 
-  // 보스 레벨
-  if (level===MAX_LEVEL) {
+  // 보스 레벨 (5, 10, 15, 20)
+  if (isBossLevel(level)) {
     updateBoss();
-    if (bossDefeated) { state='win'; showRankOverlay(); }
+    if (bossDefeated) {
+      score += 500 + level * 100;
+      playLevelClear();
+      if (level < MAX_LEVEL) {
+        level++; initLevel(); bannerTimer = BANNER_DURATION;
+      } else {
+        state = 'win'; showRankOverlay();
+      }
+    }
     updateUI(); return;
   }
 
@@ -742,11 +780,11 @@ function update() {
   }
 
   // 골
-  if (player.x+player.w>goal.x&&player.y+player.h>goal.y) {
-    score+=300+level*50;
+  if (player.x + player.w > goal.x && player.y + player.h > goal.y) {
+    score += 300 + level * 50;
     playLevelClear();
-    if (level<MAX_LEVEL) { level++; initLevel(); bannerTimer=BANNER_DURATION; }
-    else { state='win'; showRankOverlay(); }
+    if (level < MAX_LEVEL) { level++; initLevel(); bannerTimer = BANNER_DURATION; }
+    else { state = 'win'; showRankOverlay(); }
   }
 
   updateUI();
@@ -780,7 +818,7 @@ function draw() {
   drawBackground();
   if (state==='play') {
     drawPlatforms();
-    if (level!==MAX_LEVEL) drawGoal();
+    if (!isBossLevel(level)) drawGoal();
     drawCoins();
     drawEnemies();
     drawBullets();
@@ -1280,15 +1318,16 @@ function drawLevelBanner() {
   ctx.fillStyle='rgba(0,0,0,0.55)';
   ctx.fillRect(CW/2-180,CH/2-48,360,90);
   ctx.fillStyle='#ffd700'; ctx.font='bold 32px Arial'; ctx.textAlign='center';
-  if (level===MAX_LEVEL) {
-    ctx.fillStyle='#ff4040';
-    ctx.fillText('⚠️ 최종 보스 등장!',CW/2,CH/2-5);
-    ctx.font='16px Arial'; ctx.fillStyle='#fff';
-    ctx.fillText('Z/Ctrl 또는 🔫 버튼으로 공격!',CW/2,CH/2+22);
+  if (isBossLevel(level)) {
+    const bossNames = { 5:'미니 보스 등장!', 10:'중간 보스 등장!', 15:'강력한 보스 등장!', 20:'⚠️ 최종 보스 등장!' };
+    ctx.fillStyle = level===MAX_LEVEL ? '#ff2020' : '#ff8800';
+    ctx.fillText(bossNames[level]||'보스 등장!', CW/2, CH/2-5);
+    ctx.font='15px Arial'; ctx.fillStyle='#fff';
+    ctx.fillText('Z/Ctrl 또는 🔫 버튼으로 공격!', CW/2, CH/2+22);
   } else {
-    const tod=TIME_OF_DAY(level);
-    const todName={morning:'🌅 아침',day:'☀️ 낮',evening:'🌇 저녁',night:'🌙 밤'}[tod];
-    ctx.fillText(`레벨 ${level} / ${MAX_LEVEL}  ${todName}`,CW/2,CH/2+5);
+    const tod = TIME_OF_DAY(level);
+    const todName = { morning:'🌅 아침', night:'🌙 밤' }[tod] || '🌅 아침';
+    ctx.fillText(`레벨 ${level} / ${MAX_LEVEL}  ${todName}`, CW/2, CH/2+5);
   }
   ctx.textAlign='left'; ctx.restore();
   bannerTimer--;
@@ -1373,9 +1412,6 @@ document.getElementById('startBtn').addEventListener('click',startGame);
 function loop() {
   update();
   draw();
-  if (state==='win'&&level!==MAX_LEVEL) {
-    // 레벨 클리어는 initLevel에서 처리
-  }
   if (state==='win') { state='menu'; }
   if (state==='dead') { state='menu'; }
   requestAnimationFrame(loop);
