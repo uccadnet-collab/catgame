@@ -214,28 +214,30 @@
   </div>
 </div>
 
-<!-- 화면 완전 꽉 채우기: canvas 해상도를 화면 비율에 맞게 동적 설정 -->
+<!-- B안: 고정 높이 + 가변 너비 – 위아래 꽉 채움, 검은 여백 없음 -->
 <script>
   const wrapper = document.getElementById('game-wrapper');
   const cvs     = document.getElementById('canvas');
+
+  // 논리 높이 고정값 (항상 이 높이만큼의 세계를 보여줌)
+  const LOGICAL_H = 450;
 
   function resizeGame() {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    // wrapper = 화면 전체
+    // wrapper·canvas DOM 크기 = 화면 전체
     wrapper.style.width  = vw + 'px';
     wrapper.style.height = vh + 'px';
+    cvs.style.width      = vw + 'px';
+    cvs.style.height     = vh + 'px';
 
-    // canvas DOM 크기도 화면 전체
-    cvs.style.width  = vw + 'px';
-    cvs.style.height = vh + 'px';
+    // 논리 해상도:
+    //   높이 = 항상 LOGICAL_H (450) 고정 → 위아래 꽉 참
+    //   너비 = 화면 비율에 따라 자동 확장 → 좌우 여백 없음
+    const logicalH = LOGICAL_H;
+    const logicalW = Math.round(LOGICAL_H * vw / vh);
 
-    // canvas 내부 해상도 = 화면 실제 픽셀 (고해상도 대응)
-    // game.js가 사용하는 논리 해상도는 800×(800/비율)로 고정
-    // → 화면 비율에 맞춰 CH를 계산해 game.js에 전달
-    const logicalW = 800;
-    const logicalH = Math.round(logicalW * vh / vw);
     cvs.width  = logicalW;
     cvs.height = logicalH;
 
