@@ -8,209 +8,142 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>유현이 고양이의 모험</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; -webkit-tap-highlight-color: transparent; }
+    * { margin:0; padding:0; box-sizing:border-box; touch-action:none; -webkit-tap-highlight-color:transparent; }
 
-    html, body {
-      width: 100%; height: 100%;
-      overflow: hidden;
-      background: #000;
-      font-family: 'Arial', sans-serif;
-    }
+    html, body { width:100%; height:100%; overflow:hidden; background:#000; font-family:'Arial',sans-serif; }
 
-    /* ── 세로 모드 경고 ── */
+    /* ── 세로모드 경고 ── */
     #rotate-msg {
-      display: none;
-      position: fixed; inset: 0;
-      background: #111;
-      color: #fff;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-      font-size: 22px;
-      gap: 20px;
-      text-align: center;
-      padding: 20px;
+      display:none; position:fixed; inset:0; background:#111; color:#fff;
+      flex-direction:column; align-items:center; justify-content:center;
+      z-index:9999; font-size:22px; gap:20px; text-align:center; padding:20px;
     }
-    #rotate-msg .icon { font-size: 64px; animation: spin 2s linear infinite; }
+    #rotate-msg .icon { font-size:64px; animation:spin 2s linear infinite; }
     @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(90deg)} }
-    @media (orientation: portrait) {
-      #rotate-msg { display: flex; }
-    }
+    @media (orientation:portrait) { #rotate-msg { display:flex; } }
 
-    /* ── 게임 전체 컨테이너 ── */
+    /* ── 게임 루트: 16:9 letterbox ── */
     #game-root {
-      position: fixed; inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #000;
+      position:fixed; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      background:#000;
     }
 
-    /* ── 캔버스 래퍼 ── */
+    /* ── 캔버스 래퍼: 항상 16:9 비율 유지 ── */
     #game-wrapper {
-      position: relative;
-      width: 100%;
-      height: 100%;
+      position:relative;
+      /* JS가 width/height를 px로 직접 설정 */
+      background:#000;
     }
 
     #canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      image-rendering: pixelated;
+      display:block;
+      width:100%; height:100%;
+      image-rendering:pixelated;
+      image-rendering:crisp-edges;
     }
 
-    /* ── UI HUD (캔버스 위에 절대 위치) ── */
+    /* ── HUD ── */
     #ui {
-      position: absolute;
-      top: env(safe-area-inset-top, 8px);
-      left: 0; right: 0;
-      display: flex;
-      justify-content: space-between;
-      padding: 6px 14px;
-      font-size: clamp(12px, 2.5vw, 17px);
-      font-weight: bold;
-      color: #fff;
-      text-shadow: 0 1px 4px #000, 0 0 8px #000;
-      pointer-events: none;
-      z-index: 10;
+      position:absolute; top:0; left:0; right:0;
+      display:flex; justify-content:space-between;
+      padding:6px 14px;
+      font-size:clamp(11px,2vw,16px); font-weight:bold;
+      color:#fff; text-shadow:0 1px 4px #000,0 0 8px #000;
+      pointer-events:none; z-index:10;
     }
 
-    /* ── 오버레이 ── */
+    /* ── 메인 오버레이 ── */
     #overlay {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      background: rgba(0,0,0,0.70);
-      z-index: 20;
+      position:absolute; inset:0;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:8px; background:rgba(0,0,0,0.72); z-index:20;
     }
     #overlay h1 {
-      font-size: clamp(22px, 5vw, 44px);
-      color: #e94560;
-      text-shadow: 0 0 20px #e94560;
-      text-align: center;
-      padding: 0 12px;
+      font-size:clamp(18px,4.5vw,40px); color:#e94560;
+      text-shadow:0 0 20px #e94560; text-align:center; padding:0 12px;
     }
-    #overlay p { font-size: clamp(12px, 2vw, 18px); color: #eee; text-align: center; padding: 0 12px; }
-    #overlay .sub { font-size: clamp(11px, 1.6vw, 14px); color: #aaa; }
+    #overlay p  { font-size:clamp(11px,1.8vw,16px); color:#eee; text-align:center; padding:0 12px; }
+    #overlay .sub { font-size:clamp(10px,1.4vw,13px); color:#aaa; }
     #startBtn {
-      padding: 10px 32px;
-      font-size: clamp(15px, 2.5vw, 20px);
-      background: #e94560;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      margin-top: 4px;
+      padding:9px 28px; font-size:clamp(14px,2.2vw,18px);
+      background:#e94560; color:#fff; border:none; border-radius:8px; cursor:pointer; margin-top:4px;
     }
-    #startBtn:active { background: #c73652; }
+    #startBtn:active { background:#c73652; }
 
-    /* ── 랭킹 입력 오버레이 ── */
+    /* ── 랭킹 오버레이 ── */
     #rank-overlay {
-      position: absolute;
-      inset: 0;
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      background: rgba(0,0,0,0.80);
-      z-index: 30;
-      color: #fff;
+      position:absolute; inset:0; display:none;
+      flex-direction:column; align-items:center; justify-content:center;
+      gap:8px; background:rgba(0,0,0,0.88); z-index:30; color:#fff;
+      overflow-y:auto; padding:12px 0;
     }
-    #rank-overlay h2 { font-size: clamp(20px, 4vw, 36px); color: #ffd700; text-shadow: 0 0 12px #ffd700; }
+    #rank-overlay h2 { font-size:clamp(18px,3.5vw,30px); color:#ffd700; text-shadow:0 0 12px #ffd700; }
     #rank-overlay input {
-      padding: 8px 16px;
-      font-size: 18px;
-      border-radius: 8px;
-      border: 2px solid #e94560;
-      background: #222;
-      color: #fff;
-      text-align: center;
-      width: 220px;
+      padding:7px 14px; font-size:16px; border-radius:8px;
+      border:2px solid #e94560; background:#222; color:#fff;
+      text-align:center; width:180px;
     }
     #rank-overlay button {
-      padding: 8px 28px;
-      font-size: 16px;
-      background: #e94560;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
+      padding:7px 22px; font-size:15px; background:#e94560;
+      color:#fff; border:none; border-radius:8px; cursor:pointer;
     }
-    #rank-list {
-      list-style: none;
-      width: 260px;
-      max-height: 160px;
-      overflow-y: auto;
-    }
-    #rank-list li {
-      display: flex;
-      justify-content: space-between;
-      padding: 4px 8px;
-      border-bottom: 1px solid #333;
-      font-size: 14px;
-    }
-    #rank-list li:nth-child(1) { color: #ffd700; }
-    #rank-list li:nth-child(2) { color: #c0c0c0; }
-    #rank-list li:nth-child(3) { color: #cd7f32; }
-    #rank-status {
-      font-size: 12px; color: #aaa; min-height: 16px; text-align: center;
-    }
-    #rank-list li .rank-medal { margin-right: 4px; }
 
-    /* ── 모바일 컨트롤 버튼 (캔버스 안 우측/좌측 하단) ── */
+    /* 랭킹 두 컬럼 레이아웃 */
+    #rank-cols {
+      display:flex; gap:24px; align-items:flex-start; justify-content:center;
+      width:100%; max-width:560px; padding:0 12px;
+    }
+    .rank-col { flex:1; }
+    .rank-col h3 { font-size:13px; color:#ffd700; text-align:center; margin-bottom:4px; }
+    .rank-list-inner {
+      list-style:none; width:100%;
+    }
+    .rank-list-inner li {
+      display:flex; justify-content:space-between;
+      padding:3px 6px; border-bottom:1px solid #333; font-size:12px;
+    }
+    .rank-list-inner li:nth-child(1) { color:#ffd700; }
+    .rank-list-inner li:nth-child(2) { color:#c0c0c0; }
+    .rank-list-inner li:nth-child(3) { color:#cd7f32; }
+
+    #rank-status { font-size:12px; color:#aaa; min-height:15px; text-align:center; }
+
+    /* ── 모바일 컨트롤 ── */
     #mobile-controls {
-      display: none;
-      position: absolute;
-      bottom: env(safe-area-inset-bottom, 12px);
-      left: 0; right: 0;
-      justify-content: space-between;
-      align-items: flex-end;
-      padding: 0 20px;
-      pointer-events: none;
-      z-index: 15;
+      display:none; position:absolute;
+      bottom:env(safe-area-inset-bottom,8px); left:0; right:0;
+      justify-content:space-between; align-items:flex-end;
+      padding:0 16px; pointer-events:none; z-index:15;
     }
-    .ctrl-group { display: flex; gap: 8px; pointer-events: all; }
+    .ctrl-group { display:flex; gap:8px; pointer-events:all; }
     .ctrl-btn {
-      width: clamp(52px, 10vw, 68px);
-      height: clamp(52px, 10vw, 68px);
-      border-radius: 50%;
-      border: 2px solid rgba(255,255,255,0.5);
-      background: rgba(255,255,255,0.15);
-      color: #fff;
-      font-size: clamp(20px, 4vw, 28px);
-      cursor: pointer;
-      user-select: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      pointer-events: all;
-      backdrop-filter: blur(4px);
-      transition: background 0.1s;
+      width:clamp(48px,9vw,64px); height:clamp(48px,9vw,64px);
+      border-radius:50%; border:2px solid rgba(255,255,255,0.45);
+      background:rgba(255,255,255,0.13); color:#fff;
+      font-size:clamp(18px,3.5vw,26px); cursor:pointer; user-select:none;
+      display:flex; align-items:center; justify-content:center;
+      pointer-events:all; backdrop-filter:blur(4px); transition:background 0.1s;
     }
-    .ctrl-btn:active, .ctrl-btn.pressed {
-      background: rgba(255,255,255,0.40);
-    }
-    #btn-shoot {
-      background: rgba(233,69,96,0.25);
-      border-color: rgba(233,69,96,0.6);
-    }
-    #btn-shoot.pressed { background: rgba(233,69,96,0.55); }
+    .ctrl-btn:active,.ctrl-btn.pressed { background:rgba(255,255,255,0.38); }
+    #btn-shoot { background:rgba(233,69,96,0.22); border-color:rgba(233,69,96,0.55); }
+    #btn-shoot.pressed { background:rgba(233,69,96,0.52); }
 
-    @media (pointer: coarse), (max-width: 900px) {
-      #mobile-controls { display: flex; }
+    /* 음악 토글 버튼 */
+    #music-btn {
+      position:absolute; top:30px; right:8px;
+      background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.3);
+      color:#fff; border-radius:50%; width:32px; height:32px;
+      font-size:16px; cursor:pointer; z-index:12;
+      display:flex; align-items:center; justify-content:center;
+      backdrop-filter:blur(4px);
     }
+
+    @media (pointer:coarse),(max-width:900px) { #mobile-controls { display:flex; } }
   </style>
 </head>
 <body>
 
-<!-- 세로모드 경고 -->
 <div id="rotate-msg">
   <div class="icon">📱</div>
   <div>📺 가로로 돌려주세요!<br><span style="font-size:15px;color:#aaa;">이 게임은 가로 모드에서 플레이하세요</span></div>
@@ -227,6 +160,9 @@
       <span>생명: <span id="livesDisplay">❤️×10</span></span>
     </div>
 
+    <!-- 음악 토글 -->
+    <button id="music-btn" title="음악 켜기/끄기">🔊</button>
+
     <!-- 메인 오버레이 -->
     <div id="overlay">
       <h1>🐱 유현이 고양이의 모험</h1>
@@ -239,15 +175,26 @@
     <!-- 랭킹 오버레이 -->
     <div id="rank-overlay">
       <h2>🏆 게임 종료!</h2>
-      <p id="rank-score-text" style="font-size:18px;"></p>
+      <p id="rank-score-text" style="font-size:16px;"></p>
       <div style="display:flex;gap:8px;align-items:center;">
-        <input type="text" id="name-input" maxlength="10" placeholder="이름을 입력하세요">
+        <input type="text" id="name-input" maxlength="10" placeholder="이름 입력">
         <button id="rank-save-btn">저장</button>
       </div>
       <p id="rank-status"></p>
-      <p style="color:#ffd700;font-size:13px;margin-top:2px;">🌐 전체 랭킹 TOP 10</p>
-      <ul id="rank-list"></ul>
-      <button id="rank-retry-btn" style="margin-top:6px;background:#555;">다시 하기</button>
+
+      <!-- 랭킹 두 컬럼: 전체 / 오늘 -->
+      <div id="rank-cols">
+        <div class="rank-col">
+          <h3>🌐 전체 TOP 10</h3>
+          <ul class="rank-list-inner" id="rank-list-all"></ul>
+        </div>
+        <div class="rank-col">
+          <h3>📅 오늘 TOP 10</h3>
+          <ul class="rank-list-inner" id="rank-list-today"></ul>
+        </div>
+      </div>
+
+      <button id="rank-retry-btn" style="margin-top:8px;background:#555;">다시 하기</button>
     </div>
 
     <!-- 모바일 컨트롤 -->
@@ -258,16 +205,33 @@
       </div>
       <div class="ctrl-group">
         <button class="ctrl-btn" id="btn-shoot">🔫</button>
-        <button class="ctrl-btn" id="btn-jump" style="font-size:clamp(22px,4vw,30px);">▲</button>
+        <button class="ctrl-btn" id="btn-jump">▲</button>
       </div>
     </div>
   </div>
 </div>
 
+<!-- 16:9 letterbox 스케일링 -->
+<script>
+  const GAME_W = 800, GAME_H = 450;
+  const wrapper = document.getElementById('game-wrapper');
+  function resizeGame() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const scale = Math.min(vw / GAME_W, vh / GAME_H);
+    const w = Math.round(GAME_W * scale);
+    const h = Math.round(GAME_H * scale);
+    wrapper.style.width  = w + 'px';
+    wrapper.style.height = h + 'px';
+  }
+  resizeGame();
+  window.addEventListener('resize', resizeGame);
+  screen.orientation && screen.orientation.addEventListener('change', resizeGame);
+</script>
+
 <!-- Firebase SDK -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getDatabase, ref, push, query, orderByChild, limitToLast, onValue, get }
+  import { getDatabase, ref, push, onValue }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
   const firebaseConfig = {
@@ -284,53 +248,58 @@
   const app = initializeApp(firebaseConfig);
   const db  = getDatabase(app);
   const rankingRef = ref(db, 'rankings');
-
   const MEDALS = ['🥇','🥈','🥉'];
 
-  // 랭킹 실시간 렌더링
-  function renderRankList(data) {
-    const ul = document.getElementById('rank-list');
+  function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function buildList(entries, ulId) {
+    const ul = document.getElementById(ulId);
     ul.innerHTML = '';
-    if (!data) { ul.innerHTML = '<li style="color:#aaa;justify-content:center;">기록 없음</li>'; return; }
-    const entries = Object.values(data)
-      .sort((a,b) => b.score - a.score)
-      .slice(0, 10);
+    if (!entries.length) {
+      ul.innerHTML = '<li style="color:#666;justify-content:center;font-size:12px;">기록 없음</li>';
+      return;
+    }
     entries.forEach((r, i) => {
       const li = document.createElement('li');
       const medal = MEDALS[i] || `${i+1}.`;
-      const date  = r.date ? `<span style="color:#666;font-size:11px">${r.date}</span>` : '';
-      li.innerHTML = `<span><span class="rank-medal">${medal}</span>${r.name}</span><span>${r.score.toLocaleString()}점 ${date}</span>`;
+      li.innerHTML = `<span>${medal} ${r.name}</span><span>${r.score.toLocaleString()}점</span>`;
       ul.appendChild(li);
     });
   }
 
-  // 랭킹 실시간 구독
+  function renderRankLists(data) {
+    if (!data) {
+      buildList([], 'rank-list-all');
+      buildList([], 'rank-list-today');
+      return;
+    }
+    const all   = Object.values(data).sort((a,b)=>b.score-a.score).slice(0,10);
+    const today = Object.values(data).filter(r=>r.dateKey===todayStr()).sort((a,b)=>b.score-a.score).slice(0,10);
+    buildList(all,   'rank-list-all');
+    buildList(today, 'rank-list-today');
+  }
+
   function subscribeRanking() {
-    onValue(rankingRef, snap => {
-      renderRankList(snap.val());
-    });
+    onValue(rankingRef, snap => renderRankLists(snap.val()));
   }
 
-  // 점수 저장
   async function saveScore(name, score) {
-    const now = new Date();
+    const now  = new Date();
     const date = `${now.getMonth()+1}/${now.getDate()}`;
-    await push(rankingRef, { name, score, date, ts: Date.now() });
+    await push(rankingRef, { name, score, date, dateKey: todayStr(), ts: Date.now() });
   }
 
-  // game.js에서 호출할 수 있도록 window에 등록
-  window.firebaseRanking = {
-    subscribe: subscribeRanking,
-    save: saveScore,
-  };
+  window.firebaseRanking = { subscribe: subscribeRanking, save: saveScore };
 
   // 저장 버튼
   document.getElementById('rank-save-btn').addEventListener('click', async () => {
-    const name  = document.getElementById('name-input').value.trim() || '플레이어';
-    const score = window._gameScore || 0;
-    const btn   = document.getElementById('rank-save-btn');
+    const name   = document.getElementById('name-input').value.trim() || '플레이어';
+    const score  = window._gameScore || 0;
+    const btn    = document.getElementById('rank-save-btn');
     const status = document.getElementById('rank-status');
-
     btn.disabled = true;
     status.textContent = '저장 중...';
     try {
@@ -353,10 +322,8 @@
     if (window._gameShowMenu) window._gameShowMenu();
   });
 
-  // 페이지 로드 시 랭킹 구독 시작
-  window.addEventListener('load', () => {
-    subscribeRanking();
-  });
+  // 페이지 로드 시 바로 구독 (메뉴에서도 랭킹 보임)
+  window.addEventListener('load', subscribeRanking);
 </script>
 
 <script src="game.js"></script>
