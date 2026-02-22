@@ -26,6 +26,251 @@ let catLoaded = false;
 catImg.onload  = () => { catLoaded = true; };
 catImg.onerror = () => { catLoaded = false; };
 
+// ════════════════════════════════════════════
+//  사운드 시스템 (Web Audio API)
+// ════════════════════════════════════════════
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+let musicOn  = true;
+let bgmNode  = null;   // 배경음악 oscillator 그룹
+let bgmGain  = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new AudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// ── 효과음 생성기 ─────────────────────────────
+function playShoot() {
+  try {
+    const ac = getAudioCtx();
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.type = 'square';
+    o.frequency.setValueAtTime(880, ac.currentTime);
+    o.frequency.exponentialRampToValueAtTime(220, ac.currentTime + 0.08);
+    g.gain.setValueAtTime(0.18, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.09);
+    o.start(ac.currentTime); o.stop(ac.currentTime + 0.09);
+  } catch(e) {}
+}
+
+function playJump() {
+  try {
+    const ac = getAudioCtx();
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.type = 'sine';
+    o.frequency.setValueAtTime(300, ac.currentTime);
+    o.frequency.exponentialRampToValueAtTime(700, ac.currentTime + 0.12);
+    g.gain.setValueAtTime(0.22, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.14);
+    o.start(ac.currentTime); o.stop(ac.currentTime + 0.15);
+  } catch(e) {}
+}
+
+function playCoin() {
+  try {
+    const ac = getAudioCtx();
+    [523, 659, 784, 1047].forEach((freq, i) => {
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.type = 'sine';
+      const t = ac.currentTime + i * 0.05;
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.15, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      o.start(t); o.stop(t + 0.12);
+    });
+  } catch(e) {}
+}
+
+function playDead() {
+  try {
+    const ac = getAudioCtx();
+    [440, 330, 220, 110].forEach((freq, i) => {
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.type = 'sawtooth';
+      const t = ac.currentTime + i * 0.12;
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.2, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      o.start(t); o.stop(t + 0.15);
+    });
+  } catch(e) {}
+}
+
+function playHit() {
+  try {
+    const ac = getAudioCtx();
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    const distortion = ac.createWaveShaper();
+    function makeDistortion(amount) {
+      const curve = new Float32Array(256);
+      for (let i=0; i<256; i++) {
+        const x = (i*2)/256-1;
+        curve[i] = (Math.PI+amount)*x/(Math.PI+amount*Math.abs(x));
+      }
+      return curve;
+    }
+    distortion.curve = makeDistortion(200);
+    o.connect(distortion); distortion.connect(g); g.connect(ac.destination);
+    o.type = 'square';
+    o.frequency.setValueAtTime(150, ac.currentTime);
+    o.frequency.exponentialRampToValueAtTime(60, ac.currentTime + 0.2);
+    g.gain.setValueAtTime(0.3, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.22);
+    o.start(ac.currentTime); o.stop(ac.currentTime + 0.23);
+  } catch(e) {}
+}
+
+function playStamp() {
+  try {
+    const ac = getAudioCtx();
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    o.type = 'sine';
+    o.frequency.setValueAtTime(200, ac.currentTime);
+    o.frequency.exponentialRampToValueAtTime(80, ac.currentTime + 0.1);
+    g.gain.setValueAtTime(0.25, ac.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.12);
+    o.start(ac.currentTime); o.stop(ac.currentTime + 0.13);
+  } catch(e) {}
+}
+
+function playLevelClear() {
+  try {
+    const ac = getAudioCtx();
+    [523,659,784,1047,1319].forEach((freq,i) => {
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.type = 'triangle';
+      const t = ac.currentTime + i * 0.09;
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.18, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      o.start(t); o.stop(t + 0.22);
+    });
+  } catch(e) {}
+}
+
+function playSuperMode() {
+  try {
+    const ac = getAudioCtx();
+    [262,330,392,523,659,784].forEach((freq,i) => {
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.type = 'square';
+      const t = ac.currentTime + i * 0.06;
+      o.frequency.setValueAtTime(freq, t);
+      g.gain.setValueAtTime(0.12, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      o.start(t); o.stop(t + 0.14);
+    });
+  } catch(e) {}
+}
+
+// ── 배경음악: 케데헌 골든 스타일 (Web Audio API로 합성) ──
+// 케데헌 골든 midi 스타일 멜로디 시퀀스 (간소화)
+const BGM_NOTES = [
+  // 멜로디 (Hz, 박자길이, 옥타브 오프셋)
+  [392,0.25],[440,0.25],[494,0.25],[523,0.5],[494,0.25],
+  [440,0.25],[392,0.5],[330,0.25],[370,0.25],[392,0.5],
+  [392,0.25],[440,0.25],[494,0.25],[523,0.5],[587,0.25],
+  [659,0.25],[784,0.5],[698,0.25],[659,0.25],[587,0.5],
+  [523,0.25],[494,0.25],[440,0.25],[392,0.5],[330,0.25],
+  [294,0.25],[330,0.5],[370,0.25],[392,0.25],[440,0.5],
+  [392,0.25],[370,0.25],[330,0.25],[294,0.5],[262,0.25],
+  [294,0.25],[330,0.5],[392,0.25],[440,0.25],[494,0.5],
+];
+const BGM_BASS = [
+  [196,1],[165,1],[196,1],[147,1],
+  [196,1],[165,1],[175,1],[196,1],
+];
+let bgmScheduled = false;
+let bgmStartTime = 0;
+let bgmLoop = null;
+
+function startBGM() {
+  if (!musicOn) return;
+  try {
+    const ac = getAudioCtx();
+    stopBGM();
+    bgmScheduled = true;
+    scheduleBGM(ac);
+  } catch(e) {}
+}
+
+function scheduleBGM(ac) {
+  if (!musicOn || !bgmScheduled) return;
+
+  const masterGain = ac.createGain();
+  masterGain.gain.value = 0.13;
+  masterGain.connect(ac.destination);
+
+  let t = ac.currentTime + 0.05;
+  const totalDur = BGM_NOTES.reduce((s,n)=>s+n[1]*0.45,0);
+
+  // 멜로디
+  BGM_NOTES.forEach(([freq, dur]) => {
+    const d = dur * 0.45;
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.connect(g); g.connect(masterGain);
+    o.type = 'triangle';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.7, t + 0.02);
+    g.gain.setValueAtTime(0.7, t + d - 0.04);
+    g.gain.linearRampToValueAtTime(0, t + d);
+    o.start(t); o.stop(t + d + 0.01);
+    t += d;
+  });
+
+  // 베이스
+  let bt = ac.currentTime + 0.05;
+  BGM_BASS.forEach(([freq, dur]) => {
+    const d = dur * 0.45 * (BGM_NOTES.length / BGM_BASS.length);
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.connect(g); g.connect(masterGain);
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.4, bt);
+    g.gain.linearRampToValueAtTime(0, bt + d);
+    o.start(bt); o.stop(bt + d + 0.01);
+    bt += d;
+  });
+
+  // 루프
+  bgmLoop = setTimeout(() => {
+    if (musicOn && bgmScheduled) scheduleBGM(ac);
+  }, totalDur * 1000 - 200);
+}
+
+function stopBGM() {
+  bgmScheduled = false;
+  if (bgmLoop) { clearTimeout(bgmLoop); bgmLoop = null; }
+}
+
+// 음악 토글 버튼
+document.getElementById('music-btn').addEventListener('click', () => {
+  musicOn = !musicOn;
+  document.getElementById('music-btn').textContent = musicOn ? '🔊' : '🔇';
+  if (musicOn) startBGM(); else stopBGM();
+});
+
+
 // ── 상태 ──────────────────────────────────────
 let state      = 'menu';
 let score      = 0;
@@ -111,19 +356,30 @@ bindMobileBtn('btn-jump',  'jump');
 bindMobileBtn('btn-shoot', 'shoot');
 
 // ── 점프 & 발사 ───────────────────────────────
+// 총알 최대 사거리: 화면 너비의 1/3
+const BULLET_MAX_DIST = CW / 3;
+
 function tryJump() {
   if (player.onGround) {
     player.vy = JUMP_FORCE; player.onGround = false; player.jumps = 1;
+    playJump();
   } else if (player.jumps < 2) {
     player.vy = JUMP_FORCE * 0.82; player.jumps++;
+    playJump();
   }
 }
 
 function tryShoot() {
   if (shootCooldown > 0) return;
   const bx = player.facing === 1 ? player.x + player.w : player.x;
-  bullets.push({ x: bx, y: player.y + player.h * 0.4, vx: 10 * player.facing, alive: true });
+  bullets.push({
+    x: bx, y: player.y + player.h * 0.4,
+    vx: 10 * player.facing,
+    startX: bx,   // 발사 시작 위치 (사거리 계산용)
+    alive: true
+  });
   shootCooldown = 18;
+  playShoot();
 }
 
 // ── 플레이어 ──────────────────────────────────
@@ -356,7 +612,7 @@ function updateBoss() {
     bb.x += bb.vx; bb.y += bb.vy;
     if (bb.x<0||bb.x>CW||bb.y<0||bb.y>CH+50) { bb.alive=false; continue; }
     if (invincible===0 && rectOverlap(player,{x:bb.x-6,y:bb.y-6,w:12,h:12})) {
-      bb.alive=false; loseLife(); return;
+      bb.alive=false; playHit(); loseLife(); return;
     }
   }
   bossBullets = bossBullets.filter(bb=>bb.alive);
@@ -420,13 +676,14 @@ function update() {
 
   if (player.y>CH+120) { loseLife(); return; }
 
-  // 플레이어 총알 이동
+  // 플레이어 총알 이동 (사거리: 화면 1/3)
   for (const bull of bullets) {
     if (!bull.alive) continue;
-    bull.x+=bull.vx;
-    if (bull.x<-20||bull.x>ww+20) bull.alive=false;
+    bull.x += bull.vx;
+    const dist = Math.abs(bull.x - bull.startX);
+    if (dist > BULLET_MAX_DIST || bull.x < -20 || bull.x > ww + 20) bull.alive = false;
   }
-  bullets=bullets.filter(b=>b.alive);
+  bullets = bullets.filter(b => b.alive);
 
   // 보스 레벨
   if (level===MAX_LEVEL) {
@@ -453,7 +710,7 @@ function update() {
       const stomping=player.vy>0&&player.y+player.h<e.y+e.h*0.55;
       if (stomping||superTimer>0) {
         e.alive=false;
-        if (stomping) player.vy=JUMP_FORCE*0.55;
+        if (stomping) { player.vy=JUMP_FORCE*0.55; playStamp(); }
         score+=superTimer>0?200:100;
       } else if (invincible===0) { loseLife(); return; }
     }
@@ -463,6 +720,7 @@ function update() {
       if (!bull.alive) continue;
       if (rectOverlap({x:bull.x-4,y:bull.y-4,w:8,h:8},e)) {
         bull.alive=false; e.alive=false; score+=150;
+        playStamp();
       }
     }
   }
@@ -475,8 +733,10 @@ function update() {
     if (c.collected) continue;
     if (Math.hypot(player.x+player.w/2-c.x,player.y+player.h/2-c.y)<c.r+18) {
       c.collected=true; score+=10; coinCounter++;
+      playCoin();
       if (coinCounter>=SUPER_COIN_COUNT) {
         superTimer=SUPER_DURATION; coinCounter=0; invincible=SUPER_DURATION;
+        playSuperMode();
       }
     }
   }
@@ -484,6 +744,7 @@ function update() {
   // 골
   if (player.x+player.w>goal.x&&player.y+player.h>goal.y) {
     score+=300+level*50;
+    playLevelClear();
     if (level<MAX_LEVEL) { level++; initLevel(); bannerTimer=BANNER_DURATION; }
     else { state='win'; showRankOverlay(); }
   }
@@ -493,8 +754,9 @@ function update() {
 
 function loseLife() {
   lives--;
+  playHit();
   updateUI();
-  if (lives<=0) { state='dead'; lastScore=score; showRankOverlay(); }
+  if (lives<=0) { playDead(); state='dead'; lastScore=score; showRankOverlay(); }
   else { player.reset(); cameraX=0; invincible=120; }
 }
 
@@ -1102,6 +1364,7 @@ function startGame() {
   overlay.style.display='none';
   document.getElementById('rank-overlay').style.display='none';
   state='play';
+  startBGM(); // 배경음악 시작 (첫 클릭으로 AudioContext 활성화)
 }
 
 document.getElementById('startBtn').addEventListener('click',startGame);
