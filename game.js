@@ -173,16 +173,39 @@ function playStamp() {
 function playLevelClear() {
   try {
     const ac = getAudioCtx();
-    [523,659,784,1047,1319].forEach((freq,i) => {
+    // 귀여운 멜로디: 도미솔도↑ + 여운
+    const melody = [
+      [523,0.00,0.13],[659,0.11,0.13],[784,0.22,0.13],
+      [1047,0.33,0.22],[1319,0.50,0.13],[1047,0.60,0.10],
+      [1319,0.68,0.35]
+    ];
+    melody.forEach(([freq,offset,dur]) => {
       const o = ac.createOscillator();
       const g = ac.createGain();
       o.connect(g); g.connect(ac.destination);
-      o.type = 'triangle';
-      const t = ac.currentTime + i * 0.09;
+      o.type = 'sine';
+      const t = ac.currentTime + offset;
       o.frequency.setValueAtTime(freq, t);
-      g.gain.setValueAtTime(0.18, t);
-      g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
-      o.start(t); o.stop(t + 0.22);
+      // 귀여운 비브라토 느낌
+      o.frequency.linearRampToValueAtTime(freq * 1.02, t + dur * 0.5);
+      o.frequency.linearRampToValueAtTime(freq, t + dur);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.22, t + 0.02);
+      g.gain.setValueAtTime(0.22, t + dur - 0.04);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur + 0.05);
+      o.start(t); o.stop(t + dur + 0.08);
+    });
+    // 반짝이는 고음 장식음
+    [2093,2637].forEach((freq,i) => {
+      const o = ac.createOscillator();
+      const g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.type = 'sine';
+      const t = ac.currentTime + 0.55 + i * 0.1;
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.08, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+      o.start(t); o.stop(t + 0.18);
     });
   } catch(e) {}
 }
@@ -641,26 +664,27 @@ function initBoss(lvl) {
   };
 }
 
-function updateBoss() {
+function updateBoss(dt=1) {
   const b = bossState;
   if (!b || !b.alive) return;
 
-  b.phaseTimer++;
-  b.shootTimer++;
+  b.phaseTimer += dt;
+  b.shootTimer  += dt;
   b.eyeGlow = 0.5 + 0.5*Math.sin(frameCount*0.1);
 
   // 좌우 순찰
-  b.x += b.vx;
+  b.x += b.vx * dt;
   if (b.x < CW*0.3 || b.x + b.w > CW*0.95) b.vx *= -1;
   b.facing = b.vx > 0 ? 1 : -1;
 
-  // 발 공격 (tier에 따라 주기 변화)
-  if (b.phaseTimer % b.pawInterval === 0) {
+  // 발 공격
+  if (b.phaseTimer >= b.pawInterval) {
+    b.phaseTimer = 0;
     b.pawAttack = true; b.pawTimer = 40;
     b.pawSide = b.vx > 0 ? 1 : -1;
   }
   if (b.pawAttack) {
-    b.pawTimer--;
+    b.pawTimer -= dt;
     if (b.pawTimer <= 0) b.pawAttack = false;
   }
 
@@ -669,14 +693,15 @@ function updateBoss() {
     const pawX = b.pawSide === 1 ? b.x + b.w : b.x - 40;
     const pawY = b.y + b.h * 0.6;
     const pawHit = { x: pawX, y: pawY, w: 40, h: 30 };
-    if (invincible === 0 && rectOverlap(player, pawHit)) { loseLife(); return; }
+    if (invincible <= 0 && rectOverlap(player, pawHit)) { loseLife(); return; }
   }
 
-  // 총알 발사 (tier에 따라 발수 & 속도 증가)
-  if (b.shootTimer % b.shootInterval === 0) {
+  // 총알 발사
+  if (b.shootTimer >= b.shootInterval) {
+    b.shootTimer = 0;
     const dx = player.x - b.x;
     const dy = player.y - b.y;
-    const bulletCount = 1 + b.tier; // 2~5발
+    const bulletCount = 1 + b.tier;
     const spreadAngle = 0.25;
     for (let a = -(bulletCount-1)/2; a <= (bulletCount-1)/2; a++) {
       const angle = Math.atan2(dy, dx) + a * spreadAngle;
@@ -692,9 +717,9 @@ function updateBoss() {
   // 보스 총알 이동 & 히트
   for (const bb of bossBullets) {
     if (!bb.alive) continue;
-    bb.x += bb.vx; bb.y += bb.vy;
+    bb.x += bb.vx * dt; bb.y += bb.vy * dt;
     if (bb.x<0||bb.x>CW||bb.y<0||bb.y>CH+50) { bb.alive=false; continue; }
-    if (invincible===0 && rectOverlap(player,{x:bb.x-6,y:bb.y-6,w:12,h:12})) {
+    if (invincible<=0 && rectOverlap(player,{x:bb.x-6,y:bb.y-6,w:12,h:12})) {
       bb.alive=false; playHit(); loseLife(); return;
     }
   }
@@ -734,19 +759,21 @@ function resolvePlayerPlatform(p,plat) {
   }
 }
 
-// ── 업데이트 ──────────────────────────────────
-function update() {
+// ── 업데이트 (dt: delta time, 60fps=1.0 기준) ──
+function update(dt=1) {
+  if (state === 'levelclear') { updateLevelClear(dt); return; }
   if (state !== 'play') return;
-  frameCount++;
-  if (invincible>0) invincible--;
-  if (shootCooldown>0) shootCooldown--;
+  frameCount += dt;
+  if (invincible>0) invincible -= dt;
+  if (shootCooldown>0) shootCooldown -= dt;
 
   // 플레이어 이동
   player.vx=0;
   if (isLeft())  { player.vx=-PLAYER_SPEED; player.facing=-1; }
   if (isRight()) { player.vx= PLAYER_SPEED; player.facing= 1; }
-  player.vy+=GRAVITY;
-  player.x+=player.vx; player.y+=player.vy;
+  player.vy += GRAVITY * dt;
+  player.x  += player.vx * dt;
+  player.y  += player.vy * dt;
   player.onGround=false;
   for (const plat of platforms) {
     if (rectOverlap(player,plat)) resolvePlayerPlatform(player,plat);
@@ -762,7 +789,7 @@ function update() {
   // 플레이어 총알 이동 (사거리: 화면 1/3)
   for (const bull of bullets) {
     if (!bull.alive) continue;
-    bull.x += bull.vx;
+    bull.x += bull.vx * dt;
     const dist = Math.abs(bull.x - bull.startX);
     if (dist > getBulletMaxDist() || bull.x < -20 || bull.x > ww + 20) bull.alive = false;
   }
@@ -770,13 +797,14 @@ function update() {
 
   // 보스 레벨 (5, 10, 15, 20)
   if (isBossLevel(level)) {
-    updateBoss();
+    updateBoss(dt);
     if (bossDefeated) {
-      score += 500 + level * 100;
+      const addScore = 500 + level * 100;
       playLevelClear();
       if (level < MAX_LEVEL) {
-        level++; initLevel(); bannerTimer = BANNER_DURATION;
+        startLevelClearAnim(level + 1, addScore);
       } else {
+        score += addScore;
         state = 'win'; showRankOverlay();
       }
     }
@@ -787,13 +815,12 @@ function update() {
   for (const e of enemies) {
     if (!e.alive) continue;
     if (e.type==='fly') {
-      // 비행 몬스터: 사인파 상하 + 좌우 순찰
-      e.flyPhase+=0.05;
-      e.x+=e.vx;
-      e.y=e.baseY+Math.sin(e.flyPhase)*30;
+      e.flyPhase += 0.05 * dt;
+      e.x += e.vx * dt;
+      e.y = e.baseY + Math.sin(e.flyPhase) * 30;
       if (e.x<=e.patrolMin||e.x+e.w>=e.patrolMax) e.vx*=-1;
     } else {
-      e.x+=e.vx;
+      e.x += e.vx * dt;
       if (e.x<=e.patrolMin||e.x+e.w>=e.patrolMax) e.vx*=-1;
     }
 
@@ -803,7 +830,7 @@ function update() {
         e.alive=false;
         if (stomping) { player.vy=JUMP_FORCE*0.55; playStamp(); }
         score+=superTimer>0?200:100;
-      } else if (invincible===0) { loseLife(); return; }
+      } else if (invincible<=0) { loseLife(); return; }
     }
 
     // 플레이어 총알 맞기
@@ -817,7 +844,10 @@ function update() {
   }
 
   // 슈퍼 타이머
-  if (superTimer>0) { superTimer--; if (superTimer===0) coinCounter=0; }
+  if (superTimer>0) {
+    superTimer -= dt;
+    if (superTimer<=0) { superTimer=0; coinCounter=0; }
+  }
 
   // 코인
   for (const c of coins) {
@@ -834,10 +864,14 @@ function update() {
 
   // 골
   if (player.x + player.w > goal.x && player.y + player.h > goal.y) {
-    score += 300 + level * 50;
+    const addScore = 300 + level * 50;
     playLevelClear();
-    if (level < MAX_LEVEL) { level++; initLevel(); bannerTimer = BANNER_DURATION; }
-    else { state = 'win'; showRankOverlay(); }
+    if (level < MAX_LEVEL) {
+      startLevelClearAnim(level + 1, addScore);
+    } else {
+      score += addScore;
+      state = 'win'; showRankOverlay();
+    }
   }
 
   updateUI();
@@ -847,8 +881,15 @@ function loseLife() {
   lives--;
   playHit();
   updateUI();
-  if (lives<=0) { playDead(); state='dead'; lastScore=score; showRankOverlay(); }
-  else { player.reset(); cameraX=0; invincible=120; }
+  if (lives<=0) {
+    playDead();
+    state='dead';
+    lastScore=score;
+    // 이어하기 횟수 차감 없이 바로 이어하기 화면 표시
+    showContinueOverlay();
+  } else {
+    player.reset(); cameraX=0; invincible=120;
+  }
 }
 
 function updateUI() {
@@ -869,7 +910,7 @@ function updateUI() {
 function draw() {
   ctx.clearRect(0,0,CW,CH);
   drawBackground();
-  if (state==='play') {
+  if (state==='play' || state==='levelclear') {
     drawPlatforms();
     if (!isBossLevel(level)) drawGoal();
     drawCoins();
@@ -879,6 +920,10 @@ function draw() {
     drawBoss();
     drawLevelBanner();
     drawSuperModeHUD();
+  }
+  // 레벨클리어 연출은 게임 위에 오버레이
+  if (state==='levelclear') {
+    drawLevelClearAnim();
   }
 }
 
@@ -1392,6 +1437,153 @@ function drawGoal() {
 let bannerTimer=0;
 const BANNER_DURATION=90;
 
+// ── 레벨클리어 연출 ────────────────────────────
+let clearAnim = null; // { timer, nextLevel, addScore }
+const CLEAR_DURATION = 150; // 약 2.5초 (60fps 기준)
+
+function startLevelClearAnim(nextLevel, addScore) {
+  clearAnim = { timer: CLEAR_DURATION, nextLevel, addScore };
+  state = 'levelclear';
+  stopBGM();
+}
+
+function updateLevelClear(dt) {
+  if (!clearAnim) return;
+  clearAnim.timer -= dt;
+  if (clearAnim.timer <= 0) {
+    // 연출 끝 → 다음 레벨로
+    score += clearAnim.addScore;
+    if (clearAnim.nextLevel <= MAX_LEVEL) {
+      level = clearAnim.nextLevel;
+      initLevel();
+      bannerTimer = BANNER_DURATION;
+      state = 'play';
+      startBGM();
+    } else {
+      state = 'win';
+      showRankOverlay();
+    }
+    clearAnim = null;
+  }
+}
+
+function drawLevelClearAnim() {
+  if (!clearAnim) return;
+  const t = clearAnim.timer;
+  const total = CLEAR_DURATION;
+  // 페이드인(처음 20프레임) / 페이드아웃(마지막 30프레임)
+  let alpha = 1;
+  if (t > total - 20) alpha = (total - t) / 20;
+  else if (t < 30)    alpha = t / 30;
+  alpha = Math.max(0, Math.min(1, alpha));
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // 배경 오버레이 (별이 빛나는 느낌)
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // 반짝이는 별 파티클
+  const starCount = 18;
+  for (let i = 0; i < starCount; i++) {
+    const angle = (i / starCount) * Math.PI * 2 + (total - t) * 0.04;
+    const dist  = CH * 0.28 + Math.sin((total-t)*0.08 + i) * CH * 0.06;
+    const sx    = CW/2 + Math.cos(angle) * dist;
+    const sy    = CH/2 + Math.sin(angle) * dist * 0.55;
+    const sr    = (2 + (i%3)) * (0.7 + 0.3*Math.sin((total-t)*0.15+i));
+    ctx.fillStyle = `hsl(${(i*25+(total-t)*3)%360},100%,80%)`;
+    ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI*2); ctx.fill();
+  }
+
+  // 고양이 얼굴 (크게, 중앙 위쪽)
+  const cx = CW / 2;
+  const cy = CH * 0.38;
+  const bounce = Math.sin((total - t) * 0.18) * CH * 0.018;
+  const faceR  = Math.min(CW, CH) * 0.13;
+  ctx.translate(cx, cy + bounce);
+
+  // 얼굴 바탕
+  ctx.fillStyle = '#f5a623';
+  ctx.beginPath(); ctx.arc(0, 0, faceR, 0, Math.PI*2); ctx.fill();
+
+  // 귀
+  ctx.fillStyle = '#f5a623';
+  [[-1,1],[1,1]].forEach(([dx]) => {
+    ctx.beginPath();
+    ctx.moveTo(dx * faceR*0.45, -faceR*0.75);
+    ctx.lineTo(dx * faceR*0.88, -faceR*1.25);
+    ctx.lineTo(dx * faceR*0.88, -faceR*0.55);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#ffb7c5';
+    ctx.beginPath();
+    ctx.moveTo(dx * faceR*0.50, -faceR*0.78);
+    ctx.lineTo(dx * faceR*0.82, -faceR*1.15);
+    ctx.lineTo(dx * faceR*0.82, -faceR*0.60);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f5a623';
+  });
+
+  // 빨간 목도리
+  ctx.fillStyle = '#e94560';
+  ctx.beginPath();
+  ctx.ellipse(0, faceR*0.82, faceR*0.72, faceR*0.22, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // 눈 (ㅅ 모양 귀여운 눈)
+  ctx.strokeStyle = '#333'; ctx.lineWidth = faceR * 0.08;
+  ctx.lineCap = 'round';
+  [[-1,1],[1,1]].forEach(([dx]) => {
+    ctx.beginPath();
+    ctx.moveTo(dx * faceR*0.42, -faceR*0.12);
+    ctx.quadraticCurveTo(dx * faceR*0.22, -faceR*0.32, dx * faceR*0.05, -faceR*0.12);
+    ctx.stroke();
+  });
+
+  // 코
+  ctx.fillStyle = '#ff8fa3';
+  ctx.beginPath(); ctx.ellipse(0, faceR*0.12, faceR*0.1, faceR*0.07, 0, 0, Math.PI*2); ctx.fill();
+
+  // 입 (웃는 표정)
+  ctx.strokeStyle = '#c0606a'; ctx.lineWidth = faceR*0.06;
+  ctx.beginPath();
+  ctx.moveTo(-faceR*0.18, faceR*0.28);
+  ctx.quadraticCurveTo(0, faceR*0.44, faceR*0.18, faceR*0.28);
+  ctx.stroke();
+
+  // 수염
+  ctx.strokeStyle='rgba(150,100,80,0.6)'; ctx.lineWidth=faceR*0.04;
+  [[-1],[1]].forEach(([dx])=>{
+    ctx.beginPath(); ctx.moveTo(dx*faceR*0.12,-faceR*0.02); ctx.lineTo(dx*faceR*0.72,-faceR*0.1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(dx*faceR*0.12, faceR*0.12); ctx.lineTo(dx*faceR*0.72, faceR*0.18); ctx.stroke();
+  });
+
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // LEVEL CLEAR 텍스트
+  const pulse = 1 + 0.06 * Math.sin((total-t) * 0.2);
+  ctx.textAlign = 'center';
+
+  ctx.font = `bold ${Math.round(CH*0.072*pulse)}px Arial`;
+  ctx.fillStyle = '#ffd700';
+  ctx.shadowColor = '#ffd700'; ctx.shadowBlur = 18;
+  ctx.fillText('🎉 LEVEL CLEAR! 🎉', CW/2, CH*0.64);
+
+  ctx.shadowBlur = 0;
+  ctx.font = `bold ${Math.round(CH*0.048)}px Arial`;
+  ctx.fillStyle = '#fff';
+  ctx.fillText('유현이 고양이의 모험', CW/2, CH*0.74);
+
+  ctx.font = `${Math.round(CH*0.036)}px Arial`;
+  ctx.fillStyle = '#ffd700';
+  ctx.fillText(`레벨 ${clearAnim.nextLevel - 1}  →  레벨 ${clearAnim.nextLevel}`, CW/2, CH*0.84);
+
+  ctx.textAlign = 'left';
+  ctx.restore();
+}
+
 function drawLevelBanner() {
   if (bannerTimer<=0) return;
   const alpha=Math.min(1,bannerTimer/20);
@@ -1411,7 +1603,7 @@ function drawLevelBanner() {
     ctx.fillText(`레벨 ${level} / ${MAX_LEVEL}  ${todName}`, CW/2, CH/2+5);
   }
   ctx.textAlign='left'; ctx.restore();
-  bannerTimer--;
+  bannerTimer -= (typeof _lastDt !== 'undefined' ? _lastDt : 1);
 }
 
 function drawSuperModeHUD() {
@@ -1475,6 +1667,47 @@ function showOverlay(title,desc,btnText) {
   document.getElementById('startBtn').addEventListener('click',startGame);
 }
 
+// ── 이어하기 오버레이 ─────────────────────────
+function showContinueOverlay() {
+  overlay.innerHTML=`
+    <h1 style="color:#ffd700;text-shadow:0 0 20px #ffd700;">💀 게임 오버!</h1>
+    <p style="font-size:clamp(13px,2vw,18px);">레벨 <b style="color:#e94560">${level}</b> / 점수 <b style="color:#ffd700">${score.toLocaleString()}</b></p>
+    <div style="display:flex;gap:16px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
+      <button id="continueBtn" style="padding:9px 24px;font-size:clamp(13px,2vw,17px);background:#e94560;color:#fff;border:none;border-radius:8px;cursor:pointer;">
+        ▶ 이어하기 (생명 10개)
+      </button>
+      <button id="restartBtn" style="padding:9px 24px;font-size:clamp(13px,2vw,17px);background:#555;color:#fff;border:none;border-radius:8px;cursor:pointer;">
+        🔄 처음부터
+      </button>
+    </div>
+    <button id="rankBtn" style="padding:6px 18px;font-size:13px;background:transparent;color:#aaa;border:1px solid #555;border-radius:8px;cursor:pointer;margin-top:4px;">
+      🏆 점수 저장 & 랭킹 보기
+    </button>
+  `;
+  overlay.style.display='flex';
+
+  // 이어하기: 레벨 유지, 점수 유지, 생명만 10개로 충전
+  document.getElementById('continueBtn').addEventListener('click', () => {
+    lives = 10;
+    coinCounter = 0; superTimer = 0;
+    initLevel();
+    bannerTimer = BANNER_DURATION;
+    updateUI();
+    overlay.style.display='none';
+    state='play';
+    startBGM();
+  });
+
+  // 처음부터
+  document.getElementById('restartBtn').addEventListener('click', startGame);
+
+  // 점수 저장 & 랭킹
+  document.getElementById('rankBtn').addEventListener('click', () => {
+    overlay.style.display='none';
+    showRankOverlay();
+  });
+}
+
 function startGame() {
   score=0; lives=10; level=1;
   coinCounter=0; superTimer=0;
@@ -1484,18 +1717,29 @@ function startGame() {
   overlay.style.display='none';
   document.getElementById('rank-overlay').style.display='none';
   state='play';
-  startBGM(); // 배경음악 시작 (첫 클릭으로 AudioContext 활성화)
+  startBGM();
 }
 
 document.getElementById('startBtn').addEventListener('click',startGame);
 
-// ── 게임 루프 ─────────────────────────────────
-function loop() {
-  update();
+// ── 게임 루프 (Delta Time 기반 – 60Hz/90Hz/120Hz 모두 동일 속도) ──
+let lastTimestamp = 0;
+let _lastDt = 1; // bannerTimer 등 draw에서 참조
+
+function loop(timestamp) {
+  // delta: 60fps 기준 1.0, 120fps면 0.5 → 속도 균일
+  const raw = timestamp - lastTimestamp;
+  lastTimestamp = timestamp;
+  // 첫 프레임이거나 탭 전환 후 복귀 시 튀는 것 방지 (최대 3프레임치로 제한)
+  const dt = (raw > 0 && raw < 500) ? Math.min(raw / (1000 / 60), 3) : 1;
+  _lastDt = dt;
+
+  update(dt);
   draw();
-  if (state==='win') { state='menu'; }
+  if (state==='win')  { state='menu'; }
   if (state==='dead') { state='menu'; }
+  // levelclear는 updateLevelClear 내부에서 자동으로 play로 전환
   requestAnimationFrame(loop);
 }
 
-loop();
+requestAnimationFrame(loop);
