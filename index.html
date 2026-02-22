@@ -22,18 +22,18 @@
     @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(90deg)} }
     @media (orientation:portrait) { #rotate-msg { display:flex; } }
 
-    /* ── 게임 루트: 16:9 letterbox ── */
+    /* ── 게임 루트 ── */
     #game-root {
       position:fixed; inset:0;
       display:flex; align-items:center; justify-content:center;
       background:#000;
     }
 
-    /* ── 캔버스 래퍼: 항상 16:9 비율 유지 ── */
+    /* ── 캔버스 래퍼: JS가 크기 결정 ── */
     #game-wrapper {
       position:relative;
-      /* JS가 width/height를 px로 직접 설정 */
       background:#000;
+      /* 최대한 화면을 채우도록 JS에서 동적 설정 */
     }
 
     #canvas {
@@ -211,21 +211,41 @@
   </div>
 </div>
 
-<!-- 16:9 letterbox 스케일링 -->
+<!-- 화면 꽉 채우기 (가로 우선, 세로 맞춤) -->
 <script>
   const GAME_W = 800, GAME_H = 450;
   const wrapper = document.getElementById('game-wrapper');
   function resizeGame() {
-    const vw = window.innerWidth, vh = window.innerHeight;
-    const scale = Math.min(vw / GAME_W, vh / GAME_H);
-    const w = Math.round(GAME_W * scale);
-    const h = Math.round(GAME_H * scale);
-    wrapper.style.width  = w + 'px';
-    wrapper.style.height = h + 'px';
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // 화면을 최대한 채우되 비율 유지 (여백 최소화)
+    const scaleX = vw / GAME_W;
+    const scaleY = vh / GAME_H;
+    // 가로 화면에서는 높이 기준으로 맞추고 가로는 꽉 채움
+    // 세로 여백이 생기지 않도록 높이 기준 우선
+    const scale = Math.max(scaleX, scaleY); // 화면을 꽉 채움 (crop 방식)
+    // 단, 너무 많이 잘리면 min 방식 사용
+    const safeScale = scaleY; // 높이에 맞추고 좌우는 늘어남
+    // 실제로는 가로는 vw 전체, 높이는 비율 맞춤
+    const w = vw;
+    const h = Math.round(vw / GAME_W * GAME_H);
+    if (h <= vh) {
+      // 가로 꽉 채우고 높이는 비율
+      wrapper.style.width  = vw + 'px';
+      wrapper.style.height = h + 'px';
+    } else {
+      // 높이 꽉 채우고 가로는 비율
+      const h2 = vh;
+      const w2 = Math.round(vh / GAME_H * GAME_W);
+      wrapper.style.width  = w2 + 'px';
+      wrapper.style.height = h2 + 'px';
+    }
   }
   resizeGame();
   window.addEventListener('resize', resizeGame);
-  screen.orientation && screen.orientation.addEventListener('change', resizeGame);
+  screen.orientation && screen.orientation.addEventListener('change', () => {
+    setTimeout(resizeGame, 100);
+  });
 </script>
 
 <!-- Firebase SDK -->
