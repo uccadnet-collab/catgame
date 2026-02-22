@@ -1,13 +1,14 @@
 'use strict';
 // ═══════════════════════════════════════════════
-//  유현이 고양이의 모험  –  game.js  v3.0
+//  유현이 고양이의 모험  –  game.js  v4.0  (B안: 고정높이+가변너비)
 // ═══════════════════════════════════════════════
 const canvas = document.getElementById('canvas');
 const ctx    = canvas.getContext('2d');
 
-// ── 동적 해상도 (화면 비율에 따라 변함) ─────────
+// ── 동적 해상도 (B안: 고정 높이 450, 너비는 화면 비율에 따라 가변) ──
 // index.html resizeGame()이 canvas.width/height를 먼저 설정하므로
 // 여기서는 현재 값을 읽어서 사용
+// 기본값: 16:9 기준 800×450
 let CW = canvas.width  || 800;
 let CH = canvas.height || 450;
 
@@ -31,6 +32,15 @@ window._onGameResize = (newW, newH) => {
   GROUND_Y = getGroundY();
   // 플레이어 위치도 바닥 기준으로 재조정
   if (player) player.y = GROUND_Y - player.h;
+  // 플레이 중이면 레벨 구성 요소(플랫폼·코인·적) 재생성 (GROUND_Y 변경에 대응)
+  if (typeof state !== 'undefined' && state === 'play' && typeof initLevel === 'function') {
+    const savedScore = score;
+    const savedLives = lives;
+    const savedLevel = level;
+    initLevel();
+    score = savedScore; lives = savedLives; level = savedLevel;
+    updateUI();
+  }
 };
 
 // ── 이미지 로드 ───────────────────────────────
@@ -194,25 +204,54 @@ function playSuperMode() {
   } catch(e) {}
 }
 
-// ── 배경음악: 케데헌 골든 스타일 (Web Audio API로 합성) ──
-// 케데헌 골든 midi 스타일 멜로디 시퀀스 (간소화)
-const BGM_NOTES = [
-  // 멜로디 (Hz, 박자길이, 옥타브 오프셋)
-  [392,0.25],[440,0.25],[494,0.25],[523,0.5],[494,0.25],
-  [440,0.25],[392,0.5],[330,0.25],[370,0.25],[392,0.5],
-  [392,0.25],[440,0.25],[494,0.25],[523,0.5],[587,0.25],
-  [659,0.25],[784,0.5],[698,0.25],[659,0.25],[587,0.5],
-  [523,0.25],[494,0.25],[440,0.25],[392,0.5],[330,0.25],
-  [294,0.25],[330,0.5],[370,0.25],[392,0.25],[440,0.5],
-  [392,0.25],[370,0.25],[330,0.25],[294,0.5],[262,0.25],
-  [294,0.25],[330,0.5],[392,0.25],[440,0.25],[494,0.5],
+// ── 배경음악: 케데헌 골든 MIDI 실제 데이터 (Web Audio API) ──
+// MIDI 파일에서 추출한 실제 음표 데이터 [시작시간(s), 주파수(Hz), 길이(s)]
+const BGM_MELODY = [
+  [0.0000,440.0,0.1622],[0.1622,440.0,0.1622],[0.3243,493.88,0.3243],[0.6486,493.88,0.3243],
+  [0.9730,523.25,0.1622],[1.1351,493.88,0.3243],[1.4595,440.0,0.1622],[1.6216,392.0,0.3243],
+  [1.9459,440.0,0.1622],[2.1081,440.0,0.1622],[2.2703,493.88,0.3243],[2.5946,493.88,0.3243],
+  [2.9189,523.25,0.1622],[3.0811,493.88,0.3243],[3.4054,440.0,0.1622],[3.5676,392.0,0.3243],
+  [3.8919,440.0,0.1622],[4.0541,440.0,0.1622],[4.2162,493.88,0.3243],[4.5405,493.88,0.3243],
+  [4.8649,523.25,0.1622],[5.0270,493.88,0.3243],[5.3513,440.0,0.1622],[5.5135,392.0,0.3243],
+  [5.8378,440.0,0.1622],[6.0000,440.0,0.1622],[6.1622,493.88,0.3243],[6.4865,493.88,0.3243],
+  [6.8108,523.25,0.1622],[6.9730,493.88,0.3243],[7.2973,440.0,0.1622],[7.4595,392.0,0.3243],
+  [7.7838,440.0,0.1622],[7.9459,440.0,0.1622],[8.1081,493.88,0.3243],[8.4324,493.88,0.3243],
+  [8.7567,523.25,0.1622],[8.9189,493.88,0.3243],[9.2432,440.0,0.1622],[9.4054,392.0,0.3243],
+  [9.7297,440.0,0.1622],[9.8919,440.0,0.1622],[10.0540,493.88,0.3243],[10.3784,493.88,0.3243],
+  [10.7027,523.25,0.1622],[10.8649,493.88,0.3243],[11.1892,440.0,0.1622],[11.3513,392.0,0.3243],
+  [11.6757,440.0,0.1622],[11.8378,440.0,0.1622],[12.0000,493.88,0.3243],[12.3243,493.88,0.3243],
+  [12.6486,523.25,0.1622],[12.8108,493.88,0.3243],[13.1351,440.0,0.1622],[13.2973,392.0,0.3243],
+  [13.6216,329.63,0.9730]
 ];
+// 루프 길이 (마지막 음표 끝까지)
+const BGM_LOOP_DUR = 14.5946;
+
+// 베이스 [시작시간(s), 주파수(Hz), 길이(s)]
 const BGM_BASS = [
-  [196,1],[165,1],[196,1],[147,1],
-  [196,1],[165,1],[175,1],[196,1],
+  [0.0000,98.0,0.1622],[0.1622,130.81,0.1622],[0.3243,164.81,0.1622],[0.4865,130.81,0.1622],
+  [0.6486,164.81,0.1622],[0.8108,130.81,0.1622],[0.9730,164.81,0.1622],[1.1351,130.81,0.1622],
+  [1.2973,164.81,0.1622],[1.4595,130.81,0.1622],[1.6216,164.81,0.1622],[1.7838,130.81,0.1622],
+  [1.9459,98.0,0.1622],[2.1081,123.47,0.1622],[2.2703,146.83,0.1622],[2.4324,123.47,0.1622],
+  [2.5946,146.83,0.1622],[2.7568,123.47,0.1622],[2.9189,146.83,0.1622],[3.0811,123.47,0.1622],
+  [3.2432,146.83,0.1622],[3.4054,123.47,0.1622],[3.5676,146.83,0.1622],[3.7297,123.47,0.1622],
+  [3.8919,110.0,0.1622],[4.0541,146.83,0.1622],[4.2162,185.0,0.1622],[4.3784,146.83,0.1622],
+  [4.5405,185.0,0.1622],[4.7027,146.83,0.1622],[4.8649,185.0,0.1622],[5.0270,146.83,0.1622],
+  [5.1892,185.0,0.1622],[5.3513,146.83,0.1622],[5.5135,185.0,0.1622],[5.6757,146.83,0.1622],
+  [5.8378,123.47,0.1622],[6.0000,164.81,0.1622],[6.1622,196.0,0.1622],[6.3243,164.81,0.1622],
+  [6.4865,196.0,0.1622],[6.6486,164.81,0.1622],[6.8108,196.0,0.1622],[6.9730,164.81,0.1622],
+  [7.1351,196.0,0.1622],[7.2973,164.81,0.1622],[7.4595,196.0,0.1622],[7.6216,164.81,0.1622],
+  [7.7838,98.0,0.1622],[7.9459,130.81,0.1622],[8.1081,164.81,0.1622],[8.2703,130.81,0.1622],
+  [8.4324,164.81,0.1622],[8.5946,130.81,0.1622],[8.7567,164.81,0.1622],[8.9189,130.81,0.1622],
+  [9.0811,164.81,0.1622],[9.2432,130.81,0.1622],[9.4054,164.81,0.1622],[9.5676,130.81,0.1622],
+  [9.7297,98.0,0.1622],[9.8919,123.47,0.1622],[10.0540,146.83,0.1622],[10.2162,123.47,0.1622],
+  [10.3784,146.83,0.1622],[10.5405,123.47,0.1622],[10.7027,146.83,0.1622],[10.8649,123.47,0.1622],
+  [11.0270,146.83,0.1622],[11.1892,123.47,0.1622],[11.3513,146.83,0.1622],[11.5135,123.47,0.1622],
+  [11.6757,110.0,0.1622],[11.8378,146.83,0.1622],[12.0000,185.0,0.1622],[12.1622,146.83,0.1622],
+  [12.3243,185.0,0.1622],[12.4865,146.83,0.1622],[12.6486,185.0,0.1622],[12.8108,146.83,0.1622],
+  [13.0270,185.0,0.1622],[13.1892,146.83,0.1622],[13.3513,185.0,0.1622],[13.5135,146.83,0.1622]
 ];
+
 let bgmScheduled = false;
-let bgmStartTime = 0;
 let bgmLoop = null;
 
 function startBGM() {
@@ -228,48 +267,47 @@ function startBGM() {
 function scheduleBGM(ac) {
   if (!musicOn || !bgmScheduled) return;
 
+  const base = ac.currentTime + 0.05;
+
+  // 마스터 게인
   const masterGain = ac.createGain();
-  masterGain.gain.value = 0.13;
+  masterGain.gain.value = 0.12;
   masterGain.connect(ac.destination);
 
-  let t = ac.currentTime + 0.05;
-  const totalDur = BGM_NOTES.reduce((s,n)=>s+n[1]*0.45,0);
-
-  // 멜로디
-  BGM_NOTES.forEach(([freq, dur]) => {
-    const d = dur * 0.45;
+  // 멜로디 – triangle 파형 (밝고 깨끗한 소리)
+  BGM_MELODY.forEach(([startSec, freq, dur]) => {
+    const t = base + startSec;
+    const d = Math.max(dur * 0.85, 0.05);
     const o = ac.createOscillator();
     const g = ac.createGain();
     o.connect(g); g.connect(masterGain);
     o.type = 'triangle';
     o.frequency.value = freq;
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.7, t + 0.02);
-    g.gain.setValueAtTime(0.7, t + d - 0.04);
+    g.gain.linearRampToValueAtTime(0.75, t + 0.015);
+    g.gain.setValueAtTime(0.75, t + d - 0.03);
     g.gain.linearRampToValueAtTime(0, t + d);
     o.start(t); o.stop(t + d + 0.01);
-    t += d;
   });
 
-  // 베이스
-  let bt = ac.currentTime + 0.05;
-  BGM_BASS.forEach(([freq, dur]) => {
-    const d = dur * 0.45 * (BGM_NOTES.length / BGM_BASS.length);
+  // 베이스 – sine 파형 (부드러운 저음)
+  BGM_BASS.forEach(([startSec, freq, dur]) => {
+    const t = base + startSec;
+    const d = Math.max(dur * 0.8, 0.04);
     const o = ac.createOscillator();
     const g = ac.createGain();
     o.connect(g); g.connect(masterGain);
     o.type = 'sine';
     o.frequency.value = freq;
-    g.gain.setValueAtTime(0.4, bt);
-    g.gain.linearRampToValueAtTime(0, bt + d);
-    o.start(bt); o.stop(bt + d + 0.01);
-    bt += d;
+    g.gain.setValueAtTime(0.35, t);
+    g.gain.linearRampToValueAtTime(0, t + d);
+    o.start(t); o.stop(t + d + 0.01);
   });
 
-  // 루프
+  // 루프: 마지막 음표가 끝나면 다시 재생
   bgmLoop = setTimeout(() => {
     if (musicOn && bgmScheduled) scheduleBGM(ac);
-  }, totalDur * 1000 - 200);
+  }, BGM_LOOP_DUR * 1000 - 150);
 }
 
 function stopBGM() {
@@ -866,29 +904,32 @@ function drawBackground() {
 
 // 아침 배경 – 한국 전통 마을 실루엣
 function drawMorningBg(t) {
-  // 태양
+  // 태양 – CW/CH 비율
   const sunX=CW*0.8, sunY=CH*0.18;
-  const sunGrad=ctx.createRadialGradient(sunX,sunY,5,sunX,sunY,50);
+  const sunR=Math.min(CW,CH)*0.065;
+  const sunGrad=ctx.createRadialGradient(sunX,sunY,sunR*0.1,sunX,sunY,sunR*1.2);
   sunGrad.addColorStop(0,'rgba(255,230,100,1)');
   sunGrad.addColorStop(1,'rgba(255,180,60,0)');
-  ctx.fillStyle=sunGrad; ctx.beginPath(); ctx.arc(sunX,sunY,50,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle='rgba(255,220,80,0.9)'; ctx.beginPath(); ctx.arc(sunX,sunY,22,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=sunGrad; ctx.beginPath(); ctx.arc(sunX,sunY,sunR*1.2,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgba(255,220,80,0.9)'; ctx.beginPath(); ctx.arc(sunX,sunY,sunR*0.55,0,Math.PI*2); ctx.fill();
 
-  // 산 (원경)
   drawKoreanMountains(t.mountColor, 0.7, cameraX*0.08);
-  // 기와집 실루엣
   drawKoreanHouses(t.groundColor, cameraX*0.2);
-  // 전경 나무
   drawKoreanPines(cameraX*0.35);
 }
 
 function drawDayBg(t) {
-  // 구름
+  // 구름 – CW/CH 비율
   ctx.fillStyle='rgba(255,255,255,0.7)';
-  const clouds=[{x:100,y:55,w:130,h:45},{x:360,y:40,w:100,h:36},{x:620,y:70,w:150,h:50}];
+  const clouds=[
+    {x:0.125,y:0.12,w:0.162,h:0.10},
+    {x:0.45, y:0.09,w:0.125,h:0.08},
+    {x:0.775,y:0.15,w:0.188,h:0.11}
+  ];
   for (const c of clouds) {
-    const cx=((c.x-cameraX*0.2)%(CW+c.w+20)+CW+c.w+20)%(CW+c.w+20)-c.w;
-    ctx.beginPath(); ctx.ellipse(cx,c.y,c.w/2,c.h/2,0,0,Math.PI*2); ctx.fill();
+    const cw=c.w*CW, ch=c.h*CH, cy=c.y*CH;
+    const cx=((c.x*CW-cameraX*0.2)%(CW+cw+20)+CW+cw+20)%(CW+cw+20)-cw;
+    ctx.beginPath(); ctx.ellipse(cx,cy,cw/2,ch/2,0,0,Math.PI*2); ctx.fill();
   }
   drawKoreanMountains(t.mountColor, 0.65, cameraX*0.08);
   drawKoreanHouses(t.groundColor, cameraX*0.2);
@@ -896,11 +937,12 @@ function drawDayBg(t) {
 }
 
 function drawEveningBg(t) {
-  // 낙조
+  // 낙조 – CW/CH 비율
   const sunX=CW*0.15, sunY=CH*0.55;
-  const sg=ctx.createRadialGradient(sunX,sunY,2,sunX,sunY,80);
+  const sunR=Math.min(CW,CH)*0.11;
+  const sg=ctx.createRadialGradient(sunX,sunY,2,sunX,sunY,sunR);
   sg.addColorStop(0,'rgba(255,100,0,0.9)'); sg.addColorStop(1,'rgba(255,50,0,0)');
-  ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(sunX,sunY,80,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(sunX,sunY,sunR,0,Math.PI*2); ctx.fill();
   // 반짝이는 별 조금
   drawStars(8);
   drawKoreanMountains(t.mountColor, 0.75, cameraX*0.08);
@@ -910,12 +952,13 @@ function drawEveningBg(t) {
 }
 
 function drawNightBg(t) {
-  // 달
+  // 달 – CW/CH 비율
   const moonX=CW*0.82, moonY=CH*0.15;
+  const moonR=Math.min(CW,CH)*0.055;
   ctx.fillStyle='rgba(255,250,200,0.95)';
-  ctx.beginPath(); ctx.arc(moonX,moonY,24,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(moonX,moonY,moonR,0,Math.PI*2); ctx.fill();
   ctx.fillStyle='rgba(200,210,180,0.4)';
-  ctx.beginPath(); ctx.arc(moonX-7,moonY-5,20,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(moonX-moonR*0.28,moonY-moonR*0.2,moonR*0.82,0,Math.PI*2); ctx.fill();
   drawStars(40);
   drawKoreanMountains(t.mountColor, 0.8, cameraX*0.08);
   drawKoreanHouses(t.groundColor, cameraX*0.2);
@@ -926,102 +969,125 @@ function drawStars(count) {
   ctx.fillStyle='rgba(255,255,255,0.8)';
   for (let i=0; i<count; i++) {
     const sx=((i*137+50)%(CW+20));
-    const sy=(i*73+10)%(CH*0.5);
-    const r=0.5+(i%3)*0.5;
+    const sy=(i*73+10)%(CH*0.48);
+    const r=Math.min(CW,CH)*0.002*(1+(i%3)*0.5);
     ctx.beginPath(); ctx.arc(sx,sy,r,0,Math.PI*2); ctx.fill();
   }
 }
 
-// 한국 전통 산 (겹겹이)
+// 한국 전통 산 (겹겹이) – CW/CH 비율 기반
 function drawKoreanMountains(color, opacity, scrollX) {
   ctx.save(); ctx.globalAlpha=opacity;
+  // 좌표를 0~1 비율로 정의해서 CW/CH에 맞게 스케일
   const defs=[
-    {pts:[[0,320],[80,200],[160,260],[260,170],[370,230],[460,155],[560,220],[660,160],[760,230],[800,300],[800,450],[0,450]]},
-    {pts:[[0,350],[60,260],[140,300],[220,230],[310,280],[400,210],[500,270],[590,200],[680,260],[800,320],[800,450],[0,450]]},
+    {pts:[[0,0.71],[0.10,0.44],[0.20,0.58],[0.325,0.38],[0.46,0.51],[0.575,0.34],[0.70,0.49],[0.825,0.36],[0.95,0.51],[1,0.67],[1,1],[0,1]]},
+    {pts:[[0,0.78],[0.075,0.58],[0.175,0.67],[0.275,0.51],[0.39,0.62],[0.50,0.47],[0.625,0.60],[0.74,0.44],[0.85,0.58],[1,0.71],[1,1],[0,1]]},
   ];
   for (let d=0; d<defs.length; d++) {
     const off=scrollX*(0.4-d*0.15);
     ctx.fillStyle=color;
     ctx.beginPath();
     for (let i=0; i<defs[d].pts.length; i++) {
-      const [x,y]=defs[d].pts[i];
-      const rx=((x-off)%CW+CW)%CW;
-      i===0 ? ctx.moveTo(rx,y) : ctx.lineTo(rx,y);
+      const [rx0,ry0]=defs[d].pts[i];
+      const rx=((rx0*CW-off)%CW+CW)%CW;
+      const ry=ry0*CH;
+      i===0 ? ctx.moveTo(rx,ry) : ctx.lineTo(rx,ry);
     }
     ctx.fill();
     // 기와지붕 힌트 (산 위에 작은 삼각)
     if (d===0) {
       ctx.fillStyle='rgba(0,0,0,0.15)';
-      for (let tx=40; tx<800; tx+=200) {
+      for (let tx=0.05*CW; tx<CW; tx+=CW*0.25) {
         const rx=((tx-off*0.5)%CW+CW)%CW;
-        ctx.beginPath(); ctx.moveTo(rx,260); ctx.lineTo(rx+30,230); ctx.lineTo(rx+60,260); ctx.fill();
+        const ty=CH*0.58;
+        ctx.beginPath(); ctx.moveTo(rx,ty); ctx.lineTo(rx+CW*0.037,ty-CH*0.067); ctx.lineTo(rx+CW*0.075,ty); ctx.fill();
       }
     }
   }
   ctx.restore();
 }
 
-// 한국 기와집 실루엣
+// 한국 기와집 실루엣 – CW/CH 비율 기반
 function drawKoreanHouses(color, scrollX) {
   ctx.save(); ctx.globalAlpha=0.55;
   ctx.fillStyle=color;
-  const houses=[{x:80},{x:280},{x:480},{x:680},{x:880},{x:1080}];
-  for (const h of houses) {
-    const rx=((h.x-scrollX*0.5)%(CW+140)+CW+140)%(CW+140)-70;
-    const by=GROUND_Y;
+  // x좌표를 CW 비율로 정의
+  const houseSpacing = CW * 0.25;
+  const houseCount = 6;
+  const hw = CW * 0.09;   // 집 너비
+  const hh = CH * 0.11;   // 집 높이 (벽)
+  const roofH = CH * 0.08; // 지붕 높이
+  for (let i=0; i<houseCount; i++) {
+    const baseX = i * houseSpacing;
+    const rx = ((baseX - scrollX*0.5) % (houseSpacing*houseCount + hw) + houseSpacing*houseCount + hw) % (houseSpacing*houseCount + hw) - hw*0.5;
+    const by = GROUND_Y;
     // 기둥/벽
-    ctx.fillRect(rx+10,by-50,60,50);
-    // 기와지붕 (이중 처마)
+    ctx.fillStyle=color;
+    ctx.fillRect(rx, by-hh, hw, hh);
+    // 기와지붕
     ctx.beginPath();
-    ctx.moveTo(rx-10,by-50);
-    ctx.lineTo(rx+40,by-85); ctx.lineTo(rx+90,by-50);
+    ctx.moveTo(rx-hw*0.15, by-hh);
+    ctx.lineTo(rx+hw*0.5, by-hh-roofH);
+    ctx.lineTo(rx+hw*1.15, by-hh);
     ctx.fill();
     ctx.fillStyle='rgba(0,0,0,0.2)';
     ctx.beginPath();
-    ctx.moveTo(rx-14,by-50);
-    ctx.lineTo(rx+40,by-90); ctx.lineTo(rx+94,by-50);
+    ctx.moveTo(rx-hw*0.2, by-hh);
+    ctx.lineTo(rx+hw*0.5, by-hh-roofH*1.08);
+    ctx.lineTo(rx+hw*1.2, by-hh);
     ctx.fill();
-    ctx.fillStyle=color;
   }
   ctx.restore();
 }
 
-// 소나무
+// 소나무 – CW/CH 비율 기반
 function drawKoreanPines(scrollX) {
   ctx.save(); ctx.globalAlpha=0.45;
-  const pines=[{x:150},{x:380},{x:600},{x:820},{x:1050}];
-  for (const p of pines) {
-    const rx=((p.x-scrollX*0.6)%(CW+60)+CW+60)%(CW+60)-30;
-    const by=GROUND_Y;
+  const pineSpacing = CW * 0.22;
+  const pineCount = 5;
+  const pw = CW * 0.025;   // 나무 너비 절반
+  const trunkH = CH * 0.055;
+  const layerH = CH * 0.05;
+  for (let i=0; i<pineCount; i++) {
+    const baseX = i * pineSpacing + CW*0.05;
+    const rx = ((baseX - scrollX*0.6) % (pineSpacing*pineCount+pw*4) + pineSpacing*pineCount+pw*4) % (pineSpacing*pineCount+pw*4) - pw*2;
+    const by = GROUND_Y;
     ctx.fillStyle='#2d5a1b';
     // 줄기
-    ctx.fillRect(rx+7,by-55,6,25);
+    ctx.fillRect(rx+pw*0.6, by-trunkH, pw*0.5, trunkH);
     // 세 층 삼각형
     for (let l=0; l<3; l++) {
       ctx.beginPath();
-      ctx.moveTo(rx,by-35-l*22); ctx.lineTo(rx+10,by-58-l*22); ctx.lineTo(rx+20,by-35-l*22);
+      ctx.moveTo(rx, by-layerH*0.7-l*layerH);
+      ctx.lineTo(rx+pw, by-layerH*2-l*layerH);
+      ctx.lineTo(rx+pw*2, by-layerH*0.7-l*layerH);
       ctx.fill();
     }
   }
   ctx.restore();
 }
 
-// 등불
+// 등불 – CW/CH 비율 기반
 function drawLanterns(scrollX) {
   const glow=0.5+0.5*Math.sin(frameCount*0.06);
-  const lans=[{x:120},{x:320},{x:520},{x:720}];
-  for (const l of lans) {
-    const rx=((l.x-scrollX*0.4)%(CW+80)+CW+80)%(CW+80)-40;
-    const ly=GROUND_Y-90;
+  const lanSpacing = CW * 0.25;
+  const lanCount = 4;
+  const lw = CW * 0.02;  // 등불 너비 절반
+  const lh = CH * 0.048; // 등불 높이
+  const ropeH = CH * 0.044;
+  for (let i=0; i<lanCount; i++) {
+    const baseX = i * lanSpacing + CW*0.15;
+    const rx = ((baseX - scrollX*0.4) % (lanSpacing*lanCount+lw*4) + lanSpacing*lanCount+lw*4) % (lanSpacing*lanCount+lw*4) - lw*2;
+    const ly = GROUND_Y - CH * 0.2;
     // 줄
     ctx.strokeStyle='rgba(180,120,0,0.7)'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(rx,ly-20); ctx.lineTo(rx,ly); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(rx, ly-ropeH); ctx.lineTo(rx, ly); ctx.stroke();
     // 등불 glow
     ctx.save();
     ctx.shadowColor=`rgba(255,160,0,${glow})`;
     ctx.shadowBlur=18;
     ctx.fillStyle=`rgba(255,${120+Math.round(glow*80)},0,0.85)`;
-    ctx.fillRect(rx-8,ly,16,22);
+    ctx.fillRect(rx-lw, ly, lw*2, lh);
     ctx.restore();
   }
 }
